@@ -67,3 +67,20 @@ export interface Disclosure {
   date: string;
   submitter: string;
 }
+
+/**
+ * 리포트 생성 입력이 되는 종목 "원자재" 데이터 (DART + KRX 병합).
+ * 분석 엔진(Phase 2)이 이 JSON을 먹어 재무비율·밸류에이션을 계산한다.
+ * 수치 계산은 전혀 하지 않고, 정규화된 원천 데이터만 담는다.
+ */
+export interface CompanyReportData {
+  profile: CompanyProfile;
+  /** 연간(사업보고서) 재무 스냅샷 — 최신 연도 우선 정렬 */
+  annualFinancials: FinancialSnapshot[];
+  /** 최신 거래일 기준 시세 스냅샷 */
+  market: MarketSnapshot;
+  /** 최근 공시 (최신순) */
+  disclosures: Disclosure[];
+  /** 데이터 수집 시각 (ISO) — 캐시 조각의 신선도가 달라 병합 시점을 기록한다 */
+  fetchedAt: string;
+}

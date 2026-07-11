@@ -27,6 +27,38 @@ export interface FinancialSnapshot {
   operatingCashFlow: number | null;
 }
 
+/** 일별 시세 1행. 가격 단위: 원 */
+export interface DailyPrice {
+  /** YYYYMMDD */
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+/** 최신 거래일 기준 시세 스냅샷 */
+export interface MarketSnapshot {
+  stockCode: string;
+  /** 기준 거래일 YYYYMMDD */
+  date: string;
+  /** 종가(현재가) */
+  close: number;
+  /** 전일 대비 (원) */
+  change: number;
+  /** 전일 대비 등락률 (%) — 코드가 계산 */
+  changePct: number;
+  marketCap: number;
+  listedShares: number;
+  high52w: number;
+  low52w: number;
+  /** KOSPI / KOSDAQ 등 시장 구분 */
+  market: string;
+  /** KRX 업종명. 조회 실패 시 null (실패를 감추지 않는다) */
+  sector: string | null;
+}
+
 export interface Disclosure {
   /** 접수번호 */
   rceptNo: string;

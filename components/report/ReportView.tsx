@@ -6,6 +6,7 @@
  */
 import type { Report } from "@/lib/report/types";
 import type { FinancialSnapshot } from "@/lib/types";
+import PrintButton from "./PrintButton";
 import {
   won,
   price,
@@ -20,7 +21,7 @@ import {
 
 function Card({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-black/10 bg-black/[0.015] p-4 dark:border-white/10 dark:bg-white/[0.02]">
+    <section className="break-inside-avoid rounded-2xl border border-black/10 bg-black/[0.015] p-4 dark:border-white/10 dark:bg-white/[0.02]">
       {title && <h2 className="mb-3 text-sm font-bold tracking-tight opacity-80">{title}</h2>}
       {children}
     </section>
@@ -32,7 +33,7 @@ function HeaderCard({ report }: { report: Report }) {
   const m = data.market;
   const badge = opinionStyle(v.opinion);
   return (
-    <section className="rounded-2xl border border-black/10 p-5 dark:border-white/10">
+    <section className="break-inside-avoid rounded-2xl border border-black/10 p-5 dark:border-white/10">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight">{data.profile.name}</h1>
@@ -233,6 +234,9 @@ export default function ReportView({ report }: { report: Report }) {
   return (
     <>
       <main className="mx-auto flex w-full max-w-md flex-col gap-3 px-4 pb-24 pt-4">
+        <div className="no-print flex justify-end">
+          <PrintButton />
+        </div>
         <HeaderCard report={report} />
         <VerificationNote report={report} />
         <SummaryCard points={n.summary} />
@@ -254,7 +258,7 @@ export default function ReportView({ report }: { report: Report }) {
       </main>
 
       {/* 하단 고정 바: 현재가·등락률 상시 표시 (§4.1) */}
-      <div className="fixed inset-x-0 bottom-0 border-t border-black/10 bg-background/95 backdrop-blur dark:border-white/10">
+      <div className="no-print fixed inset-x-0 bottom-0 border-t border-black/10 bg-background/95 backdrop-blur dark:border-white/10">
         <div className="mx-auto flex w-full max-w-md items-center justify-between px-4 py-3">
           <span className="text-sm font-semibold">{report.data.profile.name}</span>
           <span className={`text-sm font-bold tabular-nums ${changeColor(m.change)}`}>

@@ -24,3 +24,25 @@ body {
     "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
     "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
 }
+
+/* PDF 저장·인쇄: 화면 전용 요소 숨김, 색상 보존, 카드 잘림 방지, 밝은 배경 강제 */
+@media print {
+  :root {
+    --background: #ffffff;
+    --foreground: #171717;
+  }
+  body {
+    background: #ffffff;
+  }
+  .no-print {
+    display: none !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  main {
+    max-width: none !important;
+    padding-bottom: 1rem !important;
+  }
+}

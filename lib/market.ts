@@ -2,8 +2,8 @@
  * 시세 데이터 제공자 추상화.
  *
  * 2단계 전략(DEVELOPMENT_PLAN §2.2)에 따라 인터페이스로 고정한다:
- *  - 프로토타입(Phase 1~4): KrxMarketClient (lib/krx.ts, 정보데이터시스템 비공식 JSON)
- *  - 운영(Phase 6): KRX 공식 Open API 구현체로 교체 — 이 인터페이스만 유지하면 된다
+ *  - 현재 구현: KrxOpenApiClient (lib/krx.ts, KRX 공식 Open API)
+ *  - 다른 시세 소스(예: KIS)로 바꿀 때도 이 인터페이스만 유지하면 된다
  */
 import type { DailyPrice, MarketSnapshot } from "./types";
 

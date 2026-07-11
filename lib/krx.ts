@@ -1,56 +1,69 @@
 /**
- * KRX 정보데이터시스템(data.krx.co.kr) 기반 MarketDataClient 구현 (프로토타입용).
+ * KRX 공식 Open API(openapi.krx.co.kr) 기반 MarketDataClient 구현.
  *
- * ⚠️ 가정 명시 (CLAUDE.md 규칙 1·6):
- *  - 이 엔드포인트는 공식 문서가 없는 웹 화면용 JSON이다. bld 코드·필드명은
- *    pykrx(github.com/sharebook-kr/pykrx)가 사용하는 요청/응답 구조를 근거로 했다.
- *      · 종목 검색: dbms/comm/finder/finder_stkisu → block1[].full_code/short_code/marketName
- *      · 일별 시세: dbms/MDC/STAT/standard/MDCSTAT01701 → output[].TRD_DD/TDD_CLSPRC/...
- *      · 업종 분류: dbms/MDC/STAT/standard/MDCSTAT03901 → block1[].ISU_SRT_CD/IDX_IND_NM
- *  - 실응답 검증은 scripts/verify-krx.ts 로 수행한다. 클라우드 IP에서는 KRX가
- *    본문 "LOGOUT"(HTTP 400)으로 차단하므로(2026-07 확인) 허용된 네트워크에서 실행해야 한다.
- *  - 운영 전환(Phase 6) 시 이 파일만 공식 Open API 구현체로 교체한다 (lib/market.ts 참고).
+ * 스키마는 추측이 아니라 2026-07-11 실응답으로 확인했다 (CLAUDE.md 규칙 6):
+ *  - 엔드포인트: GET https://data-dbg.krx.co.kr/svc/apis/sto/{stk|ksq|knx}_bydd_trd?basDd=YYYYMMDD
+ *  - 인증: HTTP 헤더 `AUTH_KEY: <발급키>` (환경변수 KRX_OPENAPI_KEY)
+ *  - 응답: {"OutBlock_1":[{BAS_DD,ISU_CD,ISU_NM,MKT_NM,SECT_TP_NM,TDD_CLSPRC,CMPPREVDD_PRC,
+ *          FLUC_RT,TDD_OPNPRC,TDD_HGPRC,TDD_LWPRC,ACC_TRDVOL,ACC_TRDVAL,MKTCAP,LIST_SHRS}]}
+ *    수치는 콤마 없는 문자열, ISU_CD는 6자리 종목코드다.
+ *  - 휴장일·미래일·basDd 누락: HTTP 200 + {"OutBlock_1":[]}
+ *  - 인증 실패: HTTP 401 + {"respMsg":"Unauthorized Key","respCode":"401"}
+ *  - 키에 미승인된 API: HTTP 401 + {"respMsg":"Unauthorized API Call","respCode":"401"}
+ *    (현재 키는 유가증권 stk_bydd_trd·stk_isu_base_info만 승인 — KOSDAQ/KONEX는 포털에서
+ *     추가 신청 필요. 미승인 시장은 건너뛰되, 종목을 못 찾으면 오류 메시지에 명시한다)
+ *
+ * API가 "기준일자 1일 × 시장 전체 종목" 단위라 기간 조회는 일자별 반복 호출이 필요하다.
+ * (일자,시장)별 응답을 인스턴스 캐시에 담아 같은 시장의 여러 종목 조회 시 재호출을 막는다.
+ *
+ * 한계(실응답으로 확인): 일별매매정보에는 업종 분류가 없어 MarketSnapshot.sector는
+ * 항상 null이다. 상장종목정보(stk_isu_base_info)에도 업종명 필드는 없다.
  */
 import type { DailyPrice, MarketSnapshot } from "./types";
 import type { MarketDataClient } from "./market";
 
-const ENDPOINT = "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd";
+const BASE = "https://data-dbg.krx.co.kr/svc/apis/sto";
 
-/** KRX가 비브라우저/차단 IP에 돌려주는 본문. 발생 시 명시적 오류로 승격한다 */
-const BLOCKED_BODY = "LOGOUT";
+const MARKETS = [
+  { api: "stk_bydd_trd", name: "KOSPI" },
+  { api: "ksq_bydd_trd", name: "KOSDAQ" },
+  { api: "knx_bydd_trd", name: "KONEX" },
+] as const;
+type Market = (typeof MARKETS)[number];
 
-export class KrxBlockedError extends Error {
-  constructor() {
-    super(
-      "KRX가 요청을 차단했습니다(LOGOUT 응답). 클라우드 IP 차단일 가능성이 높습니다 — " +
-        "허용된 네트워크에서 재시도하거나 공식 Open API 전환(Phase 6)을 앞당기세요",
-    );
-    this.name = "KrxBlockedError";
+/** 최신 거래일 탐색 시 오늘부터 거슬러 올라갈 최대 일수 (설/추석 연휴를 덮는다) */
+const LATEST_LOOKBACK_DAYS = 14;
+/** 52주 밴드 계산 기간: 최신 거래일 포함 과거 364일 */
+const WEEK52_DAYS = 364;
+/** 일자별 호출 동시성 (한도 절약과 속도의 절충) */
+const CONCURRENCY = 4;
+
+/** 일별매매정보 1행 — 필드명은 실응답 그대로 */
+interface ByddTrdRow {
+  BAS_DD: string;
+  ISU_CD: string;
+  MKT_NM: string;
+  TDD_CLSPRC: string;
+  CMPPREVDD_PRC: string;
+  TDD_OPNPRC: string;
+  TDD_HGPRC: string;
+  TDD_LWPRC: string;
+  ACC_TRDVOL: string;
+  MKTCAP: string;
+  LIST_SHRS: string;
+}
+
+export class KrxApiError extends Error {
+  constructor(
+    message: string,
+    readonly respCode?: string,
+  ) {
+    super(message);
+    this.name = "KrxApiError";
   }
 }
 
-async function krxPost(params: Record<string, string>): Promise<Record<string, unknown>> {
-  const res = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-      Referer: "https://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd",
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
-    },
-    body: new URLSearchParams({ locale: "ko_KR", csvxls_isNo: "false", ...params }).toString(),
-  });
-  const text = await res.text();
-  if (text.trim().startsWith(BLOCKED_BODY)) throw new KrxBlockedError();
-  if (!res.ok) throw new Error(`KRX HTTP ${res.status}: ${text.slice(0, 200)}`);
-  try {
-    return JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    throw new Error(`KRX 응답이 JSON이 아닙니다: ${text.slice(0, 200)}`);
-  }
-}
-
-/** "1,234" → 1234. "-"/빈 값은 null */
+/** "1234" → 1234. "-"/빈 값은 null (콤마는 방어적으로 제거) */
 function parseNum(v: unknown): number | null {
   const s = String(v ?? "").replace(/,/g, "").trim();
   if (s === "" || s === "-") return null;
@@ -64,26 +77,18 @@ function requireNum(v: unknown, field: string): number {
   return n;
 }
 
-interface FinderRow {
-  full_code: string; // ISIN (예: KR7005930003)
-  short_code: string; // 6자리 종목코드
-  codeName: string;
-  marketName: string; // KOSPI / KOSDAQ / KONEX
-}
+export class KrxOpenApiClient implements MarketDataClient {
+  private readonly apiKey: string;
+  /** `${api}|${basDd}` → (ISU_CD → 행). 휴장일은 빈 Map으로 캐시된다 */
+  private readonly dayCache = new Map<string, Map<string, ByddTrdRow>>();
+  /** 이 키에 승인되지 않은 시장 API (Unauthorized API Call 응답으로 확인된 것) */
+  private readonly unauthorizedApis = new Set<string>();
 
-export class KrxMarketClient implements MarketDataClient {
-  /** 종목코드 → ISIN·시장구분. 검색 결과에서 정확히 일치하는 종목만 취한다 */
-  private async resolveIsin(stockCode: string): Promise<FinderRow> {
-    const json = await krxPost({
-      bld: "dbms/comm/finder/finder_stkisu",
-      mktsel: "ALL",
-      typeNo: "0",
-      searchText: stockCode,
-    });
-    const rows = (json.block1 ?? []) as FinderRow[];
-    const hit = rows.find((r) => r.short_code === stockCode);
-    if (!hit) throw new Error(`KRX 종목 검색에 ${stockCode} 가 없습니다`);
-    return hit;
+  constructor(apiKey: string | undefined = process.env.KRX_OPENAPI_KEY) {
+    if (!apiKey) {
+      throw new Error("KRX_OPENAPI_KEY 가 설정되지 않았습니다 (.env.local 참고)");
+    }
+    this.apiKey = apiKey;
   }
 
   async fetchDailyPrices(
@@ -91,111 +96,173 @@ export class KrxMarketClient implements MarketDataClient {
     startDate: string,
     endDate: string,
   ): Promise<DailyPrice[]> {
-    const { full_code } = await this.resolveIsin(stockCode);
-    const rows = await this.fetchDailyRaw(full_code, startDate, endDate);
-    return rows
-      .map((r) => ({
-        date: String(r.TRD_DD).replace(/\//g, ""),
-        open: requireNum(r.TDD_OPNPRC, "TDD_OPNPRC"),
-        high: requireNum(r.TDD_HGPRC, "TDD_HGPRC"),
-        low: requireNum(r.TDD_LWPRC, "TDD_LWPRC"),
-        close: requireNum(r.TDD_CLSPRC, "TDD_CLSPRC"),
-        volume: requireNum(r.ACC_TRDVOL, "ACC_TRDVOL"),
-      }))
-      .sort((a, b) => a.date.localeCompare(b.date));
+    const { market } = await this.resolveMarket(stockCode);
+    const rows = await this.collectRows(market, stockCode, startDate, endDate);
+    return rows.map((r) => ({
+      date: r.BAS_DD,
+      open: requireNum(r.TDD_OPNPRC, "TDD_OPNPRC"),
+      high: requireNum(r.TDD_HGPRC, "TDD_HGPRC"),
+      low: requireNum(r.TDD_LWPRC, "TDD_LWPRC"),
+      close: requireNum(r.TDD_CLSPRC, "TDD_CLSPRC"),
+      volume: requireNum(r.ACC_TRDVOL, "ACC_TRDVOL"),
+    }));
   }
 
   async fetchSnapshot(stockCode: string): Promise<MarketSnapshot> {
-    const finder = await this.resolveIsin(stockCode);
+    const { market, date: latestDate } = await this.resolveMarket(stockCode);
+    const rows = await this.collectRows(
+      market,
+      stockCode,
+      addDays(latestDate, -WEEK52_DAYS),
+      latestDate,
+    );
+    const latest = rows[rows.length - 1];
 
-    // 최근 ~54주 조회: 최신 거래일 확정 + 52주 밴드 산출을 한 번에
-    const today = new Date();
-    const from = new Date(today);
-    from.setDate(from.getDate() - 378);
-    const rows = await this.fetchDailyRaw(finder.full_code, fmtDate(from), fmtDate(today));
-    if (!rows.length) throw new Error(`${stockCode} 일별 시세가 비어 있습니다`);
-
-    // 응답은 최신일이 먼저 온다(pykrx 근거). 순서를 가정하지 않고 날짜로 정렬한다
-    const daily = rows
-      .map((r) => ({
-        date: String(r.TRD_DD).replace(/\//g, ""),
-        close: requireNum(r.TDD_CLSPRC, "TDD_CLSPRC"),
-        high: requireNum(r.TDD_HGPRC, "TDD_HGPRC"),
-        low: requireNum(r.TDD_LWPRC, "TDD_LWPRC"),
-        change: requireNum(r.CMPPREVDD_PRC, "CMPPREVDD_PRC"),
-        marketCap: requireNum(r.MKTCAP, "MKTCAP"),
-        listedShares: requireNum(r.LIST_SHRS, "LIST_SHRS"),
-      }))
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    const latest = daily[daily.length - 1];
-    const prevClose = latest.close - latest.change;
+    const close = requireNum(latest.TDD_CLSPRC, "TDD_CLSPRC");
+    const change = requireNum(latest.CMPPREVDD_PRC, "CMPPREVDD_PRC");
+    const prevClose = close - change;
 
     return {
       stockCode,
-      date: latest.date,
-      close: latest.close,
-      change: latest.change,
-      changePct: prevClose !== 0 ? (latest.change / prevClose) * 100 : 0,
-      marketCap: latest.marketCap,
-      listedShares: latest.listedShares,
-      high52w: Math.max(...daily.map((d) => d.high)),
-      low52w: Math.min(...daily.map((d) => d.low)),
-      market: finder.marketName,
-      sector: await this.fetchSector(stockCode, finder.marketName, latest.date),
+      date: latest.BAS_DD,
+      close,
+      change,
+      changePct: prevClose !== 0 ? (change / prevClose) * 100 : 0,
+      marketCap: requireNum(latest.MKTCAP, "MKTCAP"),
+      listedShares: requireNum(latest.LIST_SHRS, "LIST_SHRS"),
+      high52w: Math.max(...rows.map((r) => requireNum(r.TDD_HGPRC, "TDD_HGPRC"))),
+      low52w: Math.min(...rows.map((r) => requireNum(r.TDD_LWPRC, "TDD_LWPRC"))),
+      market: latest.MKT_NM,
+      // 공식 Open API 일별매매정보에는 업종 분류가 없다 (파일 상단 주석 참고)
+      sector: null,
     };
   }
 
-  private async fetchDailyRaw(
-    isin: string,
+  /**
+   * 오늘부터 최대 LATEST_LOOKBACK_DAYS 일 거슬러 올라가며, 승인된 시장 API에서
+   * 종목이 존재하는 최신 거래일과 소속 시장을 찾는다.
+   */
+  private async resolveMarket(stockCode: string): Promise<{ market: Market; date: string }> {
+    const today = fmtDate(new Date());
+    for (let back = 0; back <= LATEST_LOOKBACK_DAYS; back++) {
+      const date = addDays(today, -back);
+      if (isWeekend(date)) continue;
+      for (const market of MARKETS) {
+        const day = await this.fetchDay(market, date);
+        if (day?.has(stockCode)) return { market, date };
+      }
+    }
+    let msg = `최근 ${LATEST_LOOKBACK_DAYS}일 내 KRX 일별매매정보에서 ${stockCode} 를 찾지 못했습니다`;
+    if (this.unauthorizedApis.size) {
+      const skipped = MARKETS.filter((m) => this.unauthorizedApis.has(m.api))
+        .map((m) => m.name)
+        .join("/");
+      msg += ` (미승인으로 건너뛴 시장: ${skipped} — openapi.krx.co.kr 에서 해당 API 사용 신청 필요)`;
+    }
+    throw new KrxApiError(msg);
+  }
+
+  /** 기간 내 해당 종목의 행을 날짜 오름차순으로 수집한다 (주말은 호출 생략) */
+  private async collectRows(
+    market: Market,
+    stockCode: string,
     startDate: string,
     endDate: string,
-  ): Promise<Record<string, unknown>[]> {
-    const json = await krxPost({
-      bld: "dbms/MDC/STAT/standard/MDCSTAT01701",
-      isuCd: isin,
-      strtDd: startDate,
-      endDd: endDate,
-      share: "1",
-      money: "1",
-    });
-    // pykrx 근거로는 output 키이나, 통계 화면에 따라 OutBlock_1을 쓰는 경우가 있어 둘 다 수용
-    const rows = (json.output ?? json.OutBlock_1) as Record<string, unknown>[] | undefined;
-    if (!Array.isArray(rows)) {
-      throw new Error(`KRX 일별 시세 응답 구조가 예상과 다릅니다: keys=${Object.keys(json)}`);
+  ): Promise<ByddTrdRow[]> {
+    const dates: string[] = [];
+    for (let d = startDate; d <= endDate; d = addDays(d, 1)) {
+      if (!isWeekend(d)) dates.push(d);
     }
-    return rows;
+    const rows: ByddTrdRow[] = [];
+    for (let i = 0; i < dates.length; i += CONCURRENCY) {
+      const days = await Promise.all(
+        dates.slice(i, i + CONCURRENCY).map((d) => this.fetchDay(market, d)),
+      );
+      for (const day of days) {
+        const hit = day?.get(stockCode);
+        if (hit) rows.push(hit);
+      }
+    }
+    if (!rows.length) {
+      throw new KrxApiError(`${stockCode} 의 ${startDate}~${endDate} 일별매매정보가 비어 있습니다`);
+    }
+    return rows; // dates 가 오름차순이므로 결과도 오름차순
   }
 
   /**
-   * 전종목 업종분류(MDCSTAT03901)에서 해당 종목의 업종명을 찾는다.
-   * 업종은 리포트 보조 정보이므로 조회 실패 시 전체를 죽이지 않고 null을 반환한다.
+   * (시장, 기준일자) 하루치 전 종목을 조회해 캐시한다.
+   * 반환 null = 이 시장 API가 키에 승인되지 않음(호출자에서 건너뜀).
    */
-  private async fetchSector(
-    stockCode: string,
-    marketName: string,
-    tradingDate: string,
-  ): Promise<string | null> {
-    const mktId = { KOSPI: "STK", KOSDAQ: "KSQ", KONEX: "KNX" }[marketName];
-    if (!mktId) return null;
-    try {
-      const json = await krxPost({
-        bld: "dbms/MDC/STAT/standard/MDCSTAT03901",
-        mktId,
-        trdDd: tradingDate,
-        money: "1",
-      });
-      const rows = (json.block1 ?? json.OutBlock_1) as Record<string, unknown>[] | undefined;
-      if (!Array.isArray(rows)) return null;
-      const hit = rows.find((r) => r.ISU_SRT_CD === stockCode);
-      return hit ? String(hit.IDX_IND_NM) : null;
-    } catch (err) {
-      if (err instanceof KrxBlockedError) throw err; // 차단은 감추지 않는다
-      return null;
+  private async fetchDay(
+    market: Market,
+    basDd: string,
+  ): Promise<Map<string, ByddTrdRow> | null> {
+    if (this.unauthorizedApis.has(market.api)) return null;
+    const cacheKey = `${market.api}|${basDd}`;
+    const cached = this.dayCache.get(cacheKey);
+    if (cached) return cached;
+
+    const res = await fetch(`${BASE}/${market.api}?basDd=${basDd}`, {
+      headers: { AUTH_KEY: this.apiKey },
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      let respMsg = text.slice(0, 200);
+      let respCode: string | undefined;
+      try {
+        const body = JSON.parse(text) as { respMsg?: string; respCode?: string };
+        respMsg = body.respMsg ?? respMsg;
+        respCode = body.respCode;
+      } catch {
+        // JSON이 아니면 본문 앞부분을 그대로 사용
+      }
+      if (res.status === 401 && respMsg === "Unauthorized API Call") {
+        this.unauthorizedApis.add(market.api);
+        return null;
+      }
+      throw new KrxApiError(`KRX Open API HTTP ${res.status} (${market.api}): ${respMsg}`, respCode);
     }
+
+    let rows: unknown;
+    try {
+      rows = (JSON.parse(text) as { OutBlock_1?: unknown }).OutBlock_1;
+    } catch {
+      throw new KrxApiError(`KRX Open API 응답이 JSON이 아닙니다: ${text.slice(0, 200)}`);
+    }
+    if (!Array.isArray(rows)) {
+      throw new KrxApiError(`KRX Open API 응답에 OutBlock_1 배열이 없습니다: ${text.slice(0, 200)}`);
+    }
+    const day = new Map<string, ByddTrdRow>();
+    for (const r of rows as ByddTrdRow[]) day.set(r.ISU_CD, r);
+    this.dayCache.set(cacheKey, day);
+    return day;
   }
 }
 
+/** Date → YYYYMMDD */
 function fmtDate(d: Date): string {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** YYYYMMDD ± n일 (UTC 기준 산술 — 표기용 문자열 연산이라 시간대 무관) */
+function addDays(yyyymmdd: string, n: number): string {
+  const t = Date.UTC(
+    Number(yyyymmdd.slice(0, 4)),
+    Number(yyyymmdd.slice(4, 6)) - 1,
+    Number(yyyymmdd.slice(6, 8)) + n,
+  );
+  const d = new Date(t);
+  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+/** KRX는 토·일 휴장 — 해당 일자는 호출 자체를 생략한다 */
+function isWeekend(yyyymmdd: string): boolean {
+  const dow = new Date(
+    Date.UTC(
+      Number(yyyymmdd.slice(0, 4)),
+      Number(yyyymmdd.slice(4, 6)) - 1,
+      Number(yyyymmdd.slice(6, 8)),
+    ),
+  ).getUTCDay();
+  return dow === 0 || dow === 6;
 }

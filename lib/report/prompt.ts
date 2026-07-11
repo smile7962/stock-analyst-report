@@ -109,10 +109,19 @@ export function buildDataBlock(data: CompanyReportData, v: ValuationResult): str
     `[밸류에이션 지표] PER ${fmtMult(met.per)} · PBR ${fmtMult(met.pbr)} · ROE ${fmtPct(met.roe)} · ` +
       `ROA ${fmtPct(met.roa)} · EPS ${fmtWon(met.eps)} · BPS ${fmtWon(met.bps)}`,
   );
-  lines.push(
-    `[안정성·수익성] 영업이익률 ${fmtPct(met.opMargin)} · 순이익률 ${fmtPct(met.netMargin)} · ` +
-      `부채비율 ${fmtPct(met.debtRatio)} · 자기자본비율 ${fmtPct(met.equityRatio)}`,
-  );
+  // 금융·지주는 부채 대부분이 예수금 등 금융부채라, 일반 제조업식 부채비율/자기자본비율을
+  // 그대로 제시하면 레버리지가 과대해 보인다(§5.1). 유형별로 다르게 표기한다.
+  if (v.companyType === "financial" || v.companyType === "holding") {
+    lines.push(
+      `[안정성·수익성] 순이익률 ${fmtPct(met.netMargin)} · ROE ${fmtPct(met.roe)} 중심으로 수익성을 본다. ` +
+        `부채비율·자기자본비율은 예수금 등 금융부채 특성상 일반 제조업과 직접 비교가 부적합하여 제시하지 않는다`,
+    );
+  } else {
+    lines.push(
+      `[안정성·수익성] 영업이익률 ${fmtPct(met.opMargin)} · 순이익률 ${fmtPct(met.netMargin)} · ` +
+        `부채비율 ${fmtPct(met.debtRatio)} · 자기자본비율 ${fmtPct(met.equityRatio)}`,
+    );
+  }
   lines.push(
     `[성장성] 매출성장률(YoY) ${fmtPct(met.revenueGrowth)} · 영업이익성장률 ${fmtPct(met.opGrowth)} · ` +
       `매출CAGR ${fmtPct(met.revenueCagr)}`,

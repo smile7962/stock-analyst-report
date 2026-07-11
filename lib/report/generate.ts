@@ -13,12 +13,18 @@
 import { GoogleGenAI } from "@google/genai";
 import type { CompanyReportData } from "../types";
 import type { ValuationResult } from "../analysis/types";
+import { cached, TTL } from "../cache";
 import { REPORT_SCHEMA, SYSTEM_PROMPT, buildDataBlock } from "./prompt";
 import { buildAllowedNumbers, verifyNarrative } from "./verify";
 import { DISCLAIMER } from "./types";
 import type { Report, ReportNarrative, VerificationFinding } from "./types";
 
 const MODEL = "gemini-2.5-flash";
+
+/**
+ * 프롬프트/스키마/검증 로직이 바뀌면 이 값을 올려 이전 캐시를 무효화한다 (§6.5).
+ */
+export const REPORT_VERSION = 1;
 
 let client: GoogleGenAI | null = null;
 function getClient(): GoogleGenAI {
@@ -95,4 +101,23 @@ export async function generateReport(
     disclaimer: DISCLAIMER,
     generatedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * 캐시 키 — 종목·거래일·리포트버전. 거래일을 포함하므로 새 거래일에는 재생성되고,
+ * 같은 날 같은 종목은 재사용된다(§6.5). 거래일 키 덕에 "어제 주가로 계산" 문제도 없다(§3).
+ */
+export function reportCacheKey(data: CompanyReportData): string {
+  return `report:${data.profile.stockCode}:${data.market.date}:v${REPORT_VERSION}`;
+}
+
+/**
+ * generateReport 의 캐싱 래퍼. 같은 종목·같은 거래일 재조회 시 Gemini 재호출 없이
+ * 캐시된 리포트를 돌려줘 무료 티어 할당량과 지연을 아낀다.
+ */
+export async function generateReportCached(
+  data: CompanyReportData,
+  valuation: ValuationResult,
+): Promise<Report> {
+  return cached(reportCacheKey(data), TTL.daily, () => generateReport(data, valuation));
 }

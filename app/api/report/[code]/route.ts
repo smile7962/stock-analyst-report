@@ -9,7 +9,7 @@
 import { NextResponse } from "next/server";
 import { fetchCompanyReport } from "@/lib/company";
 import { analyze } from "@/lib/analysis";
-import { generateReport } from "@/lib/report/generate";
+import { generateReportCached } from "@/lib/report/generate";
 import { StockNotFoundError } from "@/lib/stock-master";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
   try {
     const data = await fetchCompanyReport(code);
     const valuation = analyze(data);
-    const report = await generateReport(data, valuation);
+    const report = await generateReportCached(data, valuation);
     return NextResponse.json(report);
   } catch (err) {
     if (err instanceof StockNotFoundError) {

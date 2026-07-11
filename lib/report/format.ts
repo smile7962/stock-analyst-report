@@ -4,7 +4,7 @@
  * 색상 관례(DEVELOPMENT_PLAN §4.1): 상승 = 빨강, 하락 = 파랑 (국내 관례).
  * 계산은 하지 않는다 — 이미 계산된 값을 문자열/클래스로 바꾸기만 한다.
  */
-import type { Opinion } from "../analysis/types";
+import type { CompanyType, Opinion } from "../analysis/types";
 
 /** 금액을 조/억/원으로. 큰 재무 수치용 */
 export function won(n: number | null): string {
@@ -43,6 +43,25 @@ export function signed(n: number | null, unit: "won" | "pct"): string {
 export function changeColor(n: number | null): string {
   if (n == null || n === 0) return "text-neutral-500";
   return n > 0 ? "text-red-600 dark:text-red-400" : "text-blue-600 dark:text-blue-400";
+}
+
+/** 배수 표기, 단 값이 0 이하면 의미 없으므로 N/A (적자기업 PER 등) */
+export function multOrNA(n: number | null): string {
+  return n != null && n > 0 ? mult(n) : "N/A";
+}
+
+/** 기업 유형 한국어 라벨 */
+export function companyTypeLabel(t: CompanyType): string {
+  switch (t) {
+    case "financial":
+      return "금융";
+    case "holding":
+      return "지주회사";
+    case "lossmaking":
+      return "적자기업";
+    default:
+      return "일반 기업";
+  }
 }
 
 /** 투자의견 배지 라벨·색상 */

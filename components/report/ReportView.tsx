@@ -6,7 +6,17 @@
  */
 import type { Report } from "@/lib/report/types";
 import type { FinancialSnapshot } from "@/lib/types";
-import { won, price, pct, mult, signed, changeColor, opinionStyle } from "@/lib/report/format";
+import {
+  won,
+  price,
+  pct,
+  mult,
+  multOrNA,
+  signed,
+  changeColor,
+  opinionStyle,
+  companyTypeLabel,
+} from "@/lib/report/format";
 
 function Card({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
@@ -159,13 +169,15 @@ function ValuationCard({ report }: { report: Report }) {
         <span className="opacity-60">PER</span>
         <span className="opacity-60">PBR</span>
         <span className="opacity-60">ROE</span>
-        <span>{mult(m.per)}</span>
+        <span>{multOrNA(m.per)}</span>
         <span>{mult(m.pbr)}</span>
         <span>{pct(m.roe, true)}</span>
       </div>
 
       <div className="mt-3 space-y-1.5 border-t border-black/10 pt-3 text-xs opacity-70 dark:border-white/10">
-        <p className="font-semibold opacity-90">산출 방법론 ({report.valuation.companyType})</p>
+        <p className="font-semibold opacity-90">
+          산출 방법론 ({companyTypeLabel(report.valuation.companyType)})
+        </p>
         {v.methods.map((mth) => (
           <p key={mth.method}>· {mth.note}</p>
         ))}

@@ -1,56 +1,62 @@
 /**
  * 리포트 생성 프롬프트 조립 (DEVELOPMENT_PLAN §6.2·§6.3).
  *
- * - LLM에는 백엔드가 계산한 <데이터>만 넘기고, 서술 전용 tool use 스키마로 출력을 강제한다.
+ * - LLM에는 백엔드가 계산한 <데이터>만 넘기고, 서술 전용 responseSchema로 출력을 강제한다.
  * - 시스템 프롬프트에 수치 창작 금지 등 제약을 상시 포함한다(§6.3).
  * - 금액은 조/억 단위로 미리 포맷해, 서술이 인용하는 형태와 검증기 허용값이 어긋나지 않게 한다.
  */
-import type Anthropic from "@anthropic-ai/sdk";
+import { Type, type Schema } from "@google/genai";
 import type { CompanyReportData } from "../types";
 import type { ValuationResult, ValuationBand } from "../analysis/types";
 
-/** 서술 전용 출력 스키마 (수치 필드 없음 — §6.1) */
-export const REPORT_TOOL: Anthropic.Tool = {
-  name: "submit_report",
-  description: "작성한 애널리스트 리포트의 서술 필드를 제출한다. 수치는 포함하지 않는다.",
-  strict: true,
-  input_schema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      summary: {
-        type: "array",
-        items: { type: "string" },
-        description: "핵심 투자 논거 3줄 (정확히 3개)",
-      },
-      business: { type: "string", description: "사업 개요 서술" },
-      earningsComment: { type: "string", description: "실적 추이 해석" },
-      valuationComment: {
-        type: "string",
-        description: "제공된 목표주가·투자의견의 산출 논리 서술 (판단을 새로 하지 말 것)",
-      },
-      strengths: {
-        type: "array",
-        items: { type: "string" },
-        description: "강점 3가지 (정확히 3개)",
-      },
-      risks: {
-        type: "array",
-        items: { type: "string" },
-        description: "리스크 3가지 (정확히 3개)",
-      },
-      analystView: { type: "string", description: "종합 애널리스트 의견" },
+/**
+ * 서술 전용 출력 스키마 (수치 필드 없음 — §6.1).
+ * Gemini structured output(responseSchema)으로 이 구조를 강제한다.
+ */
+export const REPORT_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    summary: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "핵심 투자 논거 3줄 (정확히 3개)",
     },
-    required: [
-      "summary",
-      "business",
-      "earningsComment",
-      "valuationComment",
-      "strengths",
-      "risks",
-      "analystView",
-    ],
+    business: { type: Type.STRING, description: "사업 개요 서술" },
+    earningsComment: { type: Type.STRING, description: "실적 추이 해석" },
+    valuationComment: {
+      type: Type.STRING,
+      description: "제공된 목표주가·투자의견의 산출 논리 서술 (판단을 새로 하지 말 것)",
+    },
+    strengths: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "강점 3가지 (정확히 3개)",
+    },
+    risks: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: "리스크 3가지 (정확히 3개)",
+    },
+    analystView: { type: Type.STRING, description: "종합 애널리스트 의견" },
   },
+  required: [
+    "summary",
+    "business",
+    "earningsComment",
+    "valuationComment",
+    "strengths",
+    "risks",
+    "analystView",
+  ],
+  propertyOrdering: [
+    "summary",
+    "business",
+    "earningsComment",
+    "valuationComment",
+    "strengths",
+    "risks",
+    "analystView",
+  ],
 };
 
 export const SYSTEM_PROMPT = [

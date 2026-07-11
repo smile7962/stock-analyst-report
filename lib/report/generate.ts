@@ -3,32 +3,32 @@
  *
  * 흐름:
  *  1. 백엔드 계산값으로 <데이터> 블록을 만든다.
- *  2. Claude API(tool use, 서술 전용 스키마)로 서술을 생성한다.
+ *  2. Gemini API(structured output, 서술 전용 responseSchema)로 서술을 생성한다.
  *  3. 수치 검증기로 서술 속 숫자를 <데이터>와 대조한다.
  *  4. 불일치가 있으면 문장을 지적해 1회 재생성한다.
  *  5. 재실패해도 리포트는 반환하되 verification.passed=false 로 플래그를 남긴다(§6.4).
  *
  * 수치·투자의견은 항상 백엔드 계산값(valuation)을 그대로 병합한다 — LLM은 서술만 담당한다.
  */
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import type { CompanyReportData } from "../types";
 import type { ValuationResult } from "../analysis/types";
-import { REPORT_TOOL, SYSTEM_PROMPT, buildDataBlock } from "./prompt";
+import { REPORT_SCHEMA, SYSTEM_PROMPT, buildDataBlock } from "./prompt";
 import { buildAllowedNumbers, verifyNarrative } from "./verify";
 import { DISCLAIMER } from "./types";
 import type { Report, ReportNarrative, VerificationFinding } from "./types";
 
-const MODEL = "claude-opus-4-8";
-const MAX_TOKENS = 8000;
+const MODEL = "gemini-2.5-flash";
 
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!process.env.ANTHROPIC_API_KEY) {
+let client: GoogleGenAI | null = null;
+function getClient(): GoogleGenAI {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
     throw new Error(
-      "ANTHROPIC_API_KEY 가 설정되지 않았습니다 (.env.local). 리포트 서술 생성에는 Claude API 키가 필요합니다",
+      "GEMINI_API_KEY 가 설정되지 않았습니다 (.env.local). 리포트 서술 생성에는 Gemini API 키가 필요합니다",
     );
   }
-  if (!client) client = new Anthropic();
+  if (!client) client = new GoogleGenAI({ apiKey });
   return client;
 }
 
@@ -47,21 +47,26 @@ async function callModel(
   dataBlock: string,
   retry?: VerificationFinding[],
 ): Promise<ReportNarrative> {
-  const content =
+  const contents =
     dataBlock + (retry && retry.length ? `\n\n${retryInstruction(retry)}` : "");
-  const res = await getClient().messages.create({
+  const res = await getClient().models.generateContent({
     model: MODEL,
-    max_tokens: MAX_TOKENS,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content }],
-    tools: [REPORT_TOOL],
-    tool_choice: { type: "tool", name: REPORT_TOOL.name },
+    contents,
+    config: {
+      systemInstruction: SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      responseSchema: REPORT_SCHEMA,
+    },
   });
-  const block = res.content.find((b) => b.type === "tool_use" && b.name === REPORT_TOOL.name);
-  if (!block || block.type !== "tool_use") {
-    throw new Error(`리포트 생성 실패: tool_use 응답이 없습니다 (stop_reason=${res.stop_reason})`);
+  const text = res.text;
+  if (!text) {
+    throw new Error(`리포트 생성 실패: Gemini 응답이 비어 있습니다 (finishReason=${res.candidates?.[0]?.finishReason})`);
   }
-  return block.input as ReportNarrative;
+  try {
+    return JSON.parse(text) as ReportNarrative;
+  } catch {
+    throw new Error(`리포트 생성 실패: 응답이 JSON이 아닙니다: ${text.slice(0, 200)}`);
+  }
 }
 
 export async function generateReport(

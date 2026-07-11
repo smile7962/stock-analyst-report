@@ -2,13 +2,13 @@
  * 리포트 생성 end-to-end 관찰 스크립트 (Phase 3).
  *
  * 사용법: npx tsx scripts/verify-report.ts [6자리 종목코드]
- *   기본값 005930. DART_API_KEY·KRX_OPENAPI_KEY·ANTHROPIC_API_KEY 필요(.env.local).
+ *   기본값 005930. DART_API_KEY·KRX_OPENAPI_KEY·GEMINI_API_KEY 필요(.env.local).
  *   프록시 환경의 Node 22에서는 NODE_USE_ENV_PROXY=1 필요.
  *
  * 전체 파이프라인을 관통한다: 원자재 수집(DART+KRX) → 분석 엔진(밸류에이션) →
- * LLM 서술 생성(Claude API) → 수치 검증 → 병합 리포트.
+ * LLM 서술 생성(Gemini API) → 수치 검증 → 병합 리포트.
  *
- * ⚠️ KRX 시세는 콜드 캐시 시 수 분 소요. ANTHROPIC_API_KEY 가 없으면 서술 생성 단계에서
+ * ⚠️ KRX 시세는 콜드 캐시 시 수 분 소요. GEMINI_API_KEY 가 없으면 서술 생성 단계에서
  *   명확한 오류로 멈춘다(그 전까지의 계산 결과는 정상).
  */
 import { fetchCompanyReport } from "../lib/company";

@@ -1,9 +1,9 @@
 /**
  * GET /api/report/[code] — 전체 파이프라인으로 완성된 리포트(Report) 반환.
  *
- * 원자재 수집(DART+KRX) → 분석 엔진(밸류에이션) → LLM 서술(Claude API) → 수치 검증 → 병합.
+ * 원자재 수집(DART+KRX) → 분석 엔진(밸류에이션) → LLM 서술(Gemini API) → 수치 검증 → 병합.
  *
- * ⚠️ 콜드 캐시 시 KRX 시세 수집으로 수 분 소요. ANTHROPIC_API_KEY 미설정 시 서술 생성에서
+ * ⚠️ 콜드 캐시 시 KRX 시세 수집으로 수 분 소요. GEMINI_API_KEY 미설정 시 서술 생성에서
  *   502로 실패한다(그 전 계산 결과는 정상). Phase 6에서 캐시 예열·스트리밍으로 개선.
  */
 import { NextResponse } from "next/server";

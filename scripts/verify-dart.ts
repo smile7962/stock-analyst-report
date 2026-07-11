@@ -16,6 +16,9 @@ import { join } from "node:path";
 import { fetchCompanyRaw, fetchFinancialRaw, REPRT_CODE } from "../lib/dart";
 import { normalizeFinancials } from "../lib/normalize";
 import type { StockMasterEntry } from "./build-stock-master";
+import { loadEnvLocal } from "./load-env";
+
+loadEnvLocal();
 
 function resolveTarget(stockCode: string): StockMasterEntry {
   const masterPath = join(process.cwd(), "data", "stock-master.json");

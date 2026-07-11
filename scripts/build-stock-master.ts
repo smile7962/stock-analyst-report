@@ -13,6 +13,9 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { unzipSync, strFromU8 } from "fflate";
 import { XMLParser } from "fast-xml-parser";
+import { loadEnvLocal } from "./load-env";
+
+loadEnvLocal();
 
 export interface StockMasterEntry {
   /** 6자리 종목코드 (예: 005930) */
@@ -54,7 +57,8 @@ async function main() {
   if (!xmlName) throw new Error("ZIP 안에 XML 파일이 없습니다");
   const xml = strFromU8(files[xmlName]);
 
-  const parser = new XMLParser({ ignoreAttributes: true });
+  // parseTagValue 기본값(true)이면 "005930"이 숫자 5930으로 변해 앞자리 0이 소실된다
+  const parser = new XMLParser({ ignoreAttributes: true, parseTagValue: false });
   const parsed = parser.parse(xml);
   const list: Record<string, unknown>[] = parsed?.result?.list;
   if (!Array.isArray(list)) {

@@ -9,7 +9,7 @@
  * 구조를 가지며, 비상장사는 stock_code가 공백이다. 인증키 오류 시 ZIP 대신
  * <result><status/><message/></result> XML이 그대로 온다.
  */
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { unzipSync, strFromU8 } from "fflate";
 import { XMLParser } from "fast-xml-parser";
@@ -28,17 +28,25 @@ export interface StockMasterEntry {
 
 const CORP_CODE_URL = "https://opendart.fss.or.kr/api/corpCode.xml";
 
-async function main() {
-  const apiKey = process.env.DART_API_KEY;
-  if (!apiKey) {
-    console.error(
-      "DART_API_KEY 환경변수가 필요합니다. https://opendart.fss.or.kr 에서 발급 후\n" +
-        "  DART_API_KEY=<키> npm run master\n" +
-        "형태로 실행하세요.",
-    );
-    process.exit(1);
-  }
+const MASTER_PATH = join(process.cwd(), "data", "stock-master.json");
+/** 마스터 재생성 주기: 30일 (월 TTL) */
+const MASTER_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
+/** 기존 마스터의 경과 시간(ms). 없거나 파싱 실패면 null */
+function existingMasterAgeMs(): number | null {
+  try {
+    const { generatedAt } = JSON.parse(readFileSync(MASTER_PATH, "utf8")) as {
+      generatedAt?: string;
+    };
+    const t = generatedAt ? Date.parse(generatedAt) : NaN;
+    return Number.isFinite(t) ? Date.now() - t : null;
+  } catch {
+    return null;
+  }
+}
+
+/** DART corpCode.xml 을 내려받아 마스터를 새로 쓴다 */
+async function regenerate(apiKey: string): Promise<void> {
   console.log("corpCode.xml 다운로드 중...");
   const res = await fetch(`${CORP_CODE_URL}?crtfc_key=${apiKey}`);
   if (!res.ok) {
@@ -90,6 +98,44 @@ async function main() {
     JSON.stringify({ generatedAt: new Date().toISOString(), entries }, null, 1),
   );
   console.log(`완료: ${outPath} (상장 종목 ${entries.length}건)`);
+}
+
+/**
+ * 마스터를 준비한다. --skip-if-fresh 이면 최신(30일 이내) 마스터가 있을 때 재생성을 생략한다.
+ * 배포 빌드(prebuild)에서 쓰며, 키·네트워크 실패 시 기존 마스터가 있으면 그것으로 진행한다.
+ */
+async function main() {
+  const skipIfFresh = process.argv.includes("--skip-if-fresh");
+  const age = existingMasterAgeMs();
+
+  if (skipIfFresh && age !== null && age < MASTER_MAX_AGE_MS) {
+    console.log(`종목 마스터가 최신입니다(${Math.floor(age / 86_400_000)}일 경과) — 재생성 생략`);
+    return;
+  }
+
+  const apiKey = process.env.DART_API_KEY;
+  if (!apiKey) {
+    if (age !== null) {
+      console.warn("DART_API_KEY 없음 — 기존 종목 마스터를 사용합니다(갱신 생략)");
+      return;
+    }
+    throw new Error(
+      "DART_API_KEY 환경변수가 필요합니다(마스터가 없어 생성이 필수). " +
+        "배포 빌드 환경 또는 .env.local 에 설정하세요",
+    );
+  }
+
+  try {
+    await regenerate(apiKey);
+  } catch (err) {
+    if (age !== null) {
+      console.warn(
+        `종목 마스터 갱신 실패 — 기존 마스터로 진행합니다: ${err instanceof Error ? err.message : err}`,
+      );
+      return;
+    }
+    throw err;
+  }
 }
 
 main().catch((err) => {

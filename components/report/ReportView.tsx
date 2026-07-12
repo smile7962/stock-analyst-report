@@ -114,6 +114,15 @@ function yoy(cur: number | null, prev: number | null): number | null {
 }
 
 function EarningsTable({ financials }: { financials: FinancialSnapshot[] }) {
+  if (!financials.length) {
+    return (
+      <Card title="연간 실적">
+        <p className="text-sm opacity-60">
+          재무 데이터가 없습니다 (신규 상장·특수 종목 등으로 DART 재무제표 미확보).
+        </p>
+      </Card>
+    );
+  }
   return (
     <Card title="연간 실적">
       <div className="overflow-x-auto">
@@ -238,6 +247,12 @@ export default function ReportView({ report }: { report: Report }) {
           <PrintButton />
         </div>
         <HeaderCard report={report} />
+        {!report.data.annualFinancials.length && (
+          <p className="break-inside-avoid rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+            DART 연간 재무제표가 확보되지 않아 밸류에이션·목표주가는 제시하지 않습니다. 시세와 공시
+            중심의 참고용 리포트입니다.
+          </p>
+        )}
         <VerificationNote report={report} />
         <SummaryCard points={n.summary} />
         <Range52w low={m.low52w} close={m.close} high={m.high52w} />

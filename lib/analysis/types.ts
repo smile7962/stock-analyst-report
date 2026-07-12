@@ -49,7 +49,7 @@ export interface ValuationBand {
 }
 
 export interface MethodValuation {
-  method: "RIM" | "CONSENSUS" | "PSR";
+  method: "RIM" | "FWD_EARNINGS" | "CONSENSUS" | "PSR";
   /** 방법론별 3밴드. 산출 불가 시 null */
   band: ValuationBand | null;
   /** 목표주가 합성 가중치 */
@@ -71,6 +71,10 @@ export interface ValuationResult {
   opinion: Opinion;
   /** 밸류에이션에 반영한 증권사 컨센서스 (미조회/실패 시 null) */
   consensus: Consensus | null;
+  /** AI 독립 산출 목표주가(기본) — 컨센서스 제외, RIM+선행이익력만. 비교·투명성용 (§5.2 v3) */
+  intrinsicTarget: number | null;
+  /** (컨센서스 − AI 내재가치)/AI 내재가치 × 100. 둘 다 있을 때만 */
+  consensusGapPct: number | null;
   /** 산출에 쓴 가정 — 리포트에 반드시 표기 (§5.3) */
   assumptions: string[];
 }

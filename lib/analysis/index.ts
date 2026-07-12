@@ -31,6 +31,7 @@ export {
   valuate,
   growthScenarios,
   rimValue,
-  consensusBand,
+  forwardEarningsValue,
+  spreadBand,
   REQUIRED_RETURN,
 } from "./valuation";

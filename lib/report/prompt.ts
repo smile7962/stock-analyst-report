@@ -25,7 +25,9 @@ export const REPORT_SCHEMA: Schema = {
     earningsComment: { type: Type.STRING, description: "실적 추이 해석" },
     valuationComment: {
       type: Type.STRING,
-      description: "제공된 목표주가·투자의견의 산출 논리 서술 (판단을 새로 하지 말 것)",
+      description:
+        "제공된 목표주가·투자의견의 산출 논리 서술 (판단을 새로 하지 말 것). " +
+        "[AI vs 시장]이 있으면 AI 독립 내재가치와 증권사 컨센서스를 함께 제시하고, 괴리율과 그 원인을 해석한다.",
     },
     strengths: {
       type: Type.ARRAY,
@@ -65,6 +67,7 @@ export const SYSTEM_PROMPT = [
   "제약:",
   "- <데이터>에 없는 수치를 절대 만들지 말 것. 수치가 필요하나 없으면 '자료 없음'으로 표기한다.",
   "- 목표주가·투자의견 같은 판단은 이미 <데이터>에 계산되어 있다. 그 값을 새로 정하지 말고, 산출 근거만 서술한다.",
+  "- [AI vs 시장] 자료가 있으면 컨센서스를 단순 추종하지 말고, AI 독립 내재가치와 컨센서스의 괴리·원인(선행 실적·성장·할인율 등)을 균형 있게 해석한다.",
   "- 강점과 리스크를 동등한 비중으로 다룬다. 매수 일변도 금지.",
   "- 수치를 인용할 때는 <데이터>에 적힌 값을 그대로 쓴다(반올림은 허용).",
   "- 사업 개요는 [사업 개요] 자료를 바탕으로 서술하되, 금액·비율 수치는 재무·시세 섹션의 값만 인용한다.",
@@ -157,6 +160,18 @@ export function buildDataBlock(data: CompanyReportData, v: ValuationResult): str
     `[투자판단] 기업유형 ${v.companyType} · 목표주가 ${fmtBand(v.targetPrice)} · ` +
       `상승여력(기본) ${v.upsidePct == null ? "N/A" : fmtPct(v.upsidePct, false)} · 투자의견 ${v.opinion}`,
   );
+  // AI 독립 산출 vs 시장 컨센서스 비교 — 컨센서스를 따라가지 말고 괴리를 해석하게 한다(§5.2 v3 ⑤)
+  if (v.intrinsicTarget != null) {
+    const gap =
+      v.consensusGapPct == null
+        ? ""
+        : ` · 괴리 ${v.consensusGapPct >= 0 ? "+" : ""}${v.consensusGapPct.toFixed(1)}%(컨센서스가 AI 대비)`;
+    const consLine = v.consensus?.targetMean != null ? fmtWon(v.consensus.targetMean) : "미제공";
+    lines.push(
+      `[AI vs 시장] AI 독립 내재가치(RIM+선행이익력, 컨센서스 제외) ${fmtWon(v.intrinsicTarget)} · ` +
+        `증권사 컨센서스 ${consLine}${gap} · 최종 목표주가 ${fmtWon(v.targetPrice?.base ?? null)}`,
+    );
+  }
   lines.push("[방법론]");
   for (const method of v.methods) {
     lines.push(`  ${method.method}(가중 ${method.weight}): ${fmtBand(method.band)} — ${method.note}`);

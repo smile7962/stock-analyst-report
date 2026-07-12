@@ -88,6 +88,11 @@ export function buildAllowedNumbers(
     // recommMean(1~5)은 단위 없는 값이라 토큰 추출 대상이 아니므로 허용집합 불필요
   }
 
+  // AI 독립 내재가치·괴리율·선행이익력 정당PER(1/r)
+  addMoney(v.intrinsicTarget);
+  if (v.consensusGapPct != null) percent.add(abs(v.consensusGapPct));
+  addMult(1 / REQUIRED_RETURN); // 선행이익력 정당PER
+
   // 밸류에이션 산출값
   addPct(v.upsidePct, false);
   if (v.targetPrice) {

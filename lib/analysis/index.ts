@@ -20,10 +20,17 @@ export function analyze(data: CompanyReportData): ValuationResult {
     metrics,
     data.market,
     latest?.revenue ?? null,
+    data.consensus ?? null,
   );
 }
 
 export * from "./types";
 export { computeMetrics } from "./metrics";
 export { classifyCompany } from "./classify";
-export { valuate, growthScenarios, rimValue, multipleValue, REQUIRED_RETURN } from "./valuation";
+export {
+  valuate,
+  growthScenarios,
+  rimValue,
+  consensusBand,
+  REQUIRED_RETURN,
+} from "./valuation";

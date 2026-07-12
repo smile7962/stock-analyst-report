@@ -1,4 +1,5 @@
 /** 분석 엔진(Phase 2) 출력 계약 — 모든 수치는 코드가 계산한다 (CLAUDE.md 규칙 5). */
+import type { Consensus } from "../consensus";
 
 /** 업종별 밸류에이션 분기용 기업 유형 (DEVELOPMENT_PLAN §5.1) */
 export type CompanyType = "general" | "financial" | "holding" | "lossmaking";
@@ -48,7 +49,7 @@ export interface ValuationBand {
 }
 
 export interface MethodValuation {
-  method: "RIM" | "MULTIPLE" | "PSR";
+  method: "RIM" | "CONSENSUS" | "PSR";
   /** 방법론별 3밴드. 산출 불가 시 null */
   band: ValuationBand | null;
   /** 목표주가 합성 가중치 */
@@ -68,6 +69,8 @@ export interface ValuationResult {
   /** 기본 밴드 기준 상승여력 (%) */
   upsidePct: number | null;
   opinion: Opinion;
+  /** 밸류에이션에 반영한 증권사 컨센서스 (미조회/실패 시 null) */
+  consensus: Consensus | null;
   /** 산출에 쓴 가정 — 리포트에 반드시 표기 (§5.3) */
   assumptions: string[];
 }

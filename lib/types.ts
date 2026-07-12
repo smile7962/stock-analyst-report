@@ -1,4 +1,5 @@
 /** 도메인 공통 타입 — REPORT_SPEC.md의 데이터 계약과 정합 유지 */
+import type { Consensus } from "./consensus";
 
 export interface CompanyProfile {
   corpCode: string;
@@ -83,6 +84,8 @@ export interface CompanyReportData {
   disclosures: Disclosure[];
   /** DART 사업보고서 '사업의 개요' 발췌 (없으면 null/미설정) */
   businessOverview?: string | null;
+  /** 증권사 컨센서스(선행 EPS·목표주가). 네이버 금융 집계. 실패/커버리지 없음 시 null */
+  consensus?: Consensus | null;
   /** 데이터 수집 시각 (ISO) — 캐시 조각의 신선도가 달라 병합 시점을 기록한다 */
   fetchedAt: string;
 }

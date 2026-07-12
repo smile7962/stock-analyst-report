@@ -41,23 +41,24 @@ function narrative(over: Partial<ReportNarrative>): ReportNarrative {
 }
 
 test("데이터와 일치하는 수치(조/억·%·배·원)는 통과", () => {
-  // 삼성 2025 매출 333.6조, 현재가 285,000원, ROE 10.4%, PER 36.9배, 목표 기본 366,119원
+  // 삼성 2025 매출 333.6조, 현재가 285,000원, ROE 10.4%, PER 36.9배, 목표 기본 431,291원
   const f = verifyNarrative(
     narrative({
       business: "2025년 매출은 333.6조원, 순이익 45.2조원을 기록했다.",
       earningsComment: "현재가 285,000원에 PER 36.9배, PBR 3.8배, ROE 10.4% 수준이다.",
-      valuationComment: "기본 목표주가는 366,119원으로 상승여력은 28.5%다.",
+      valuationComment: "기본 목표주가는 431,291원으로 상승여력은 51.3%다.",
     }),
     allowed,
   );
   assert.deepEqual(f, [], `예상치 못한 finding: ${JSON.stringify(f)}`);
 });
 
-test("컨센서스 사실(선행 EPS·선행 PER·목표주가 평균) 인용은 통과", () => {
+test("컨센서스·선행이익력·AI내재가치·괴리 인용은 통과", () => {
   const f = verifyNarrative(
     narrative({
       valuationComment:
-        "증권사 컨센서스 선행 EPS는 46,664원, 선행 PER 6.1배이며 목표주가 평균은 513,958원이다.",
+        "선행 EPS 46,664원에 정당PER 11.1배를 적용한 선행이익력은 518,489원이다. " +
+        "AI 독립 내재가치 376,179원 대비 컨센서스 513,958원은 36.6% 높다.",
     }),
     allowed,
   );
@@ -107,7 +108,7 @@ test("여러 문장 중 문제 문장만 골라낸다", () => {
   const f = verifyNarrative(
     narrative({
       analystView:
-        "현재가 285,000원은 부담스럽다. 적정가는 366,119원으로 본다. 다만 목표를 250,000원으로 낮춘다.",
+        "현재가 285,000원은 부담스럽다. 적정가는 431,291원으로 본다. 다만 목표를 250,000원으로 낮춘다.",
     }),
     allowed,
   );

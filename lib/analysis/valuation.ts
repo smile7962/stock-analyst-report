@@ -3,13 +3,15 @@
  *
  * 방법론 (DEVELOPMENT_PLAN §5.1~§5.3, v3 개정):
  *  - RIM(잔여이익모델) 정당 PBR 폐형: 적정가 = BPS × (ROE − g)/(r − g), r>g.
- *    후행 실적만 쓰는 내재가치 앵커. 금융업 포함 범용. 사이클 저점에선 과소평가 경향.
- *  - CONSENSUS(증권사 컨센서스): 네이버 금융이 집계한 다수 증권사 목표주가 평균(선행 실적
- *    추정 반영). 커버리지가 있을 때만. 후행 RIM의 사이클 저점 과소평가를 보정하는 선행 신호.
- *  - 성장률 g는 실적 CAGR에서 규칙으로 산출한 보수/기본/낙관 3밴드 (§5.2).
+ *    후행 실적 기반 장부 내재가치. "안전판" 성격 — 사이클 저점에선 과소평가되므로 저비중.
+ *  - FWD_EARNINGS(선행 이익력): 선행EPS × (1/r). 요구수익률 r에서 무성장 영구이익의 정당
+ *    PER(=1/r)을 선행 실적에 적용한 AI 독립 산출값. 컨센서스와 무관하게 성장을 반영한다.
+ *    완전 DCF의 성장·FCF·터미널 가치 창작을 피하고 공개 상수(r) 하나만 쓴다.
+ *  - CONSENSUS(증권사 컨센서스): 네이버 금융 집계 목표주가 평균 ±스프레드 밴드. 시장 관점.
  *
- * v2까지 쓰던 "멀티플 = EPS × 현재 PER × (1+g)"는 목표주가가 현재가로 회귀하는 순환
- * 구조라 삭제했다. 선행 신호가 필요하면 컨센서스(외부 출처)를 도입해 대체한다(§5.2 v3).
+ * 목표주가 = 위 셋의 유형별 가중평균. 일반기업은 RIM 0.2 / 선행이익력 0.4 / 컨센서스 0.4로,
+ * "AI 독립 산출(RIM+선행) 0.6 : 시장 0.4"의 균형을 둔다(컨센서스 추종 방지, §5.2 v3).
+ * combineBands 는 사용 불가한 방법(밴드 null)을 자동으로 빼고 남은 비중으로 재정규화한다.
  *
  * ROE<r 인 기업은 g가 커질수록 정당가치가 낮아진다(가치파괴 성장). 그래서 시나리오→값
  * 매핑을 라벨에 고정하지 않고, 산출된 세 값을 오름차순 정렬해 보수/기본/낙관 밴드로 삼는다.
@@ -34,28 +36,22 @@ export const G_FLOOR = 0.0;
 export const G_CAP = 0.05;
 /** 시나리오 스프레드: 보수 = 기본−spread, 낙관 = 기본+spread */
 export const SCENARIO_SPREAD = 0.02;
-/** 컨센서스 목표주가 평균 둘레의 밴드 폭(±) — 점추정에 보수/낙관 여지를 준다 */
-export const CONS_SPREAD = 0.1;
+/** 점추정(컨센서스·선행이익력)을 3밴드로 펼칠 때의 폭(±) */
+export const BAND_SPREAD = 0.1;
 /** 투자의견 임계 상승여력 (§5.3) */
 const OPINION_BUY = 0.15;
 const OPINION_SELL = -0.15;
 
-/** 목표주가 합성 가중치 {RIM, 컨센서스}. 컨센서스 확보 여부에 따라 분기 */
-function pickWeights(
-  type: CompanyType,
-  hasConsensus: boolean,
-): { rim: number; consensus: number } {
-  if (type === "lossmaking") {
-    // 적자기업은 RIM·멀티플 부적합. 컨센서스(턴어라운드 기대)가 있으면 그것만, 없으면 목표 미제시
-    return hasConsensus ? { rim: 0, consensus: 1 } : { rim: 0, consensus: 0 };
-  }
-  if (type === "financial" || type === "holding") {
-    // 금융·지주는 PBR–ROE(RIM)가 주력. 컨센서스는 동등 비중으로 보정
-    return hasConsensus ? { rim: 0.5, consensus: 0.5 } : { rim: 1, consensus: 0 };
-  }
-  // 일반: 후행 RIM은 사이클 저점에서 과소평가되므로, 컨센서스가 있으면 선행 신호를 더 크게 반영
-  return hasConsensus ? { rim: 0.35, consensus: 0.65 } : { rim: 1, consensus: 0 };
-}
+/** 목표주가 합성 가중치 {RIM, 선행이익력, 컨센서스}. combineBands가 결측 방법을 재정규화한다 */
+const WEIGHTS: Record<CompanyType, { rim: number; fwd: number; cons: number }> = {
+  // 일반: AI 독립(RIM+선행) 0.6 vs 시장 0.4. RIM은 안전판이라 저비중, 성장은 선행이익력이 담당
+  general: { rim: 0.2, fwd: 0.4, cons: 0.4 },
+  // 금융: ROE가 안정적이라 후행 RIM(PBR–ROE)이 주력. 선행이익력은 쓰지 않고 컨센서스로 보정
+  financial: { rim: 0.5, fwd: 0, cons: 0.5 },
+  holding: { rim: 0.5, fwd: 0, cons: 0.5 },
+  // 적자: 장부 RIM 부적합. 턴어라운드 선행이익력·컨센서스가 있으면 그것으로만
+  lossmaking: { rim: 0, fwd: 0.5, cons: 0.5 },
+};
 
 function clamp(x: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, x));
@@ -87,12 +83,21 @@ export function rimValue(
   return Math.max(0, bps * ((roe - g) / (r - g)));
 }
 
-/** 컨센서스 목표주가 평균 → ±spread 3밴드 */
-export function consensusBand(mean: number, spread: number = CONS_SPREAD): ValuationBand {
+/** 선행 이익력 = 선행EPS × (1/r). 무성장 영구이익의 정당가치. EPS≤0/없음이면 null */
+export function forwardEarningsValue(
+  forwardEps: number | null,
+  r: number = REQUIRED_RETURN,
+): number | null {
+  if (forwardEps === null || forwardEps <= 0) return null;
+  return forwardEps * (1 / r);
+}
+
+/** 점추정값을 ±spread 3밴드로 (컨센서스·선행이익력 공용) */
+export function spreadBand(center: number, spread: number = BAND_SPREAD): ValuationBand {
   return {
-    conservative: mean * (1 - spread),
-    base: mean,
-    optimistic: mean * (1 + spread),
+    conservative: center * (1 - spread),
+    base: center,
+    optimistic: center * (1 + spread),
   };
 }
 
@@ -103,7 +108,7 @@ function toBand(values: (number | null)[]): ValuationBand | null {
   return { conservative: s[0], base: s[1], optimistic: s[2] };
 }
 
-/** 방법론 밴드들을 가중 합성 (성분별 가중평균). 유효 밴드가 없으면 null */
+/** 방법론 밴드들을 가중 합성 (성분별 가중평균, 결측은 빼고 남은 비중으로 재정규화). 없으면 null */
 function combineBands(
   parts: { band: ValuationBand | null; weight: number }[],
 ): ValuationBand | null {
@@ -141,47 +146,66 @@ export function valuate(
   const scen = growthScenarios(metrics);
   const gs = [scen.conservative, scen.base, scen.optimistic];
   const r = REQUIRED_RETURN;
+  const w = WEIGHTS[companyType];
   const assumptions: string[] = [];
   const methods: MethodValuation[] = [];
 
-  const hasCons =
-    consensus != null && consensus.targetMean != null && consensus.targetMean > 0;
-  const weights = pickWeights(companyType, hasCons);
-
-  // RIM (적자기업 제외 전 유형 공통)
+  // RIM (적자기업 제외 전 유형 공통) — 후행 장부 내재가치, 안전판
   let rimBand: ValuationBand | null = null;
   if (companyType !== "lossmaking") {
     rimBand = toBand(gs.map((g) => rimValue(metrics.bps, metrics.roe, g, r)));
     methods.push({
       method: "RIM",
       band: rimBand,
-      weight: weights.rim,
+      weight: w.rim,
       note:
         `정당PBR = (ROE−g)/(r−g), BPS=${fmt(metrics.bps)}, ROE=${pct(metrics.roe)}, ` +
-        `r=${pct(r)}, g∈[${pct(scen.conservative)}~${pct(scen.optimistic)}] (후행 실적 기반 내재가치)`,
+        `r=${pct(r)}, g∈[${pct(scen.conservative)}~${pct(scen.optimistic)}] (후행 장부 내재가치·안전판)`,
     });
   }
 
-  // CONSENSUS (애널리스트 커버리지 있을 때만)
+  // FWD_EARNINGS (선행 이익력) — 선행EPS × (1/r). 성장을 담는 AI 독립 산출값
+  let fwdBand: ValuationBand | null = null;
+  const fwdVal = forwardEarningsValue(consensus?.forwardEps ?? null, r);
+  if (w.fwd > 0 && fwdVal != null) {
+    fwdBand = spreadBand(fwdVal);
+    methods.push({
+      method: "FWD_EARNINGS",
+      band: fwdBand,
+      weight: w.fwd,
+      note:
+        `선행EPS ${fmt(consensus!.forwardEps)}원 × 정당PER(1/r=${(1 / r).toFixed(1)}배) = ` +
+        `${fmt(fwdVal)}원, ±${pct(BAND_SPREAD)} (무성장 선행 이익력, 성장은 선행EPS에 반영)`,
+    });
+  }
+
+  // CONSENSUS — 증권사 목표주가 평균. 시장 관점
   let consBand: ValuationBand | null = null;
-  if (hasCons) {
-    consBand = consensusBand(consensus!.targetMean!);
+  const hasCons = consensus?.targetMean != null && consensus.targetMean > 0;
+  if (w.cons > 0 && hasCons) {
+    consBand = spreadBand(consensus!.targetMean!);
     methods.push({
       method: "CONSENSUS",
       band: consBand,
-      weight: weights.consensus,
+      weight: w.cons,
       note:
         `증권사 목표주가 평균 ${fmt(consensus!.targetMean)}원 (네이버 금융 집계, 기준일 ${
           consensus!.asOf ?? "N/A"
         }` +
-        `${consensus!.forwardEps != null ? `, 선행EPS ${fmt(consensus!.forwardEps)}원` : ""}` +
         `${consensus!.recommMean != null ? `, 의견평균 ${consensus!.recommMean.toFixed(2)}/5` : ""}` +
-        `). ±${pct(CONS_SPREAD)} 밴드. 외부 출처값 — 본 앱 산출이 아님`,
+        `). ±${pct(BAND_SPREAD)} 밴드. 외부 출처값 — 본 앱 산출이 아님`,
     });
   }
 
-  // 적자기업 & 컨센서스 없음 → PSR 참고치만, 목표주가 미제시
-  if (companyType === "lossmaking" && !hasCons) {
+  // AI 독립 내재가치(컨센서스 제외) — 투명성·비교용
+  const intrinsicBand = combineBands([
+    { band: rimBand, weight: w.rim },
+    { band: fwdBand, weight: w.fwd },
+  ]);
+  const intrinsicTarget = intrinsicBand?.base ?? null;
+
+  // 적자기업이 선행이익력·컨센서스 둘 다 없으면 → PSR 참고치만, 목표주가 미제시
+  if (companyType === "lossmaking" && !fwdBand && !consBand) {
     const psrRef = div(market.marketCap, latestRevenue);
     methods.push({
       method: "PSR",
@@ -191,7 +215,7 @@ export function valuate(
         psrRef === null ? "N/A" : psrRef.toFixed(2)
       }`,
     });
-    assumptions.push("최근 연간 순이익 ≤ 0 → 멀티플·RIM 부적합. 컨센서스도 없어 목표주가 미제시 (§5.1)");
+    assumptions.push("최근 연간 순이익 ≤ 0 → 장부 RIM 부적합. 선행이익력·컨센서스도 없어 목표주가 미제시 (§5.1)");
     return {
       stockCode,
       companyType,
@@ -202,13 +226,16 @@ export function valuate(
       upsidePct: null,
       opinion: "의견제시불가",
       consensus,
+      intrinsicTarget: null,
+      consensusGapPct: null,
       assumptions,
     };
   }
 
   const targetPrice = combineBands([
-    { band: rimBand, weight: weights.rim },
-    { band: consBand, weight: weights.consensus },
+    { band: rimBand, weight: w.rim },
+    { band: fwdBand, weight: w.fwd },
+    { band: consBand, weight: w.cons },
   ]);
 
   const upsidePct =
@@ -216,30 +243,40 @@ export function valuate(
       ? ((targetPrice.base - market.close) / market.close) * 100
       : null;
 
+  // AI 내재가치 대비 컨센서스 괴리 (둘 다 있을 때만) — 리포트에서 원인을 해석하게 한다
+  const consensusGapPct =
+    intrinsicTarget != null && intrinsicTarget > 0 && hasCons
+      ? ((consensus!.targetMean! - intrinsicTarget) / intrinsicTarget) * 100
+      : null;
+
   assumptions.push(
     `요구수익률 r=${pct(r)}, 장기성장률 g는 실적 CAGR 기반 [${pct(scen.conservative)}~${pct(
       scen.optimistic,
     )}] 클램프`,
   );
-  if (hasCons) {
-    const label =
-      companyType === "lossmaking"
-        ? "증권사 컨센서스 단독(적자 → RIM 부적합)"
-        : `RIM(내재가치)×${weights.rim} + 증권사 컨센서스×${weights.consensus} 가중평균`;
+  const usedWeights = [
+    rimBand ? `RIM ${w.rim}` : null,
+    fwdBand ? `선행이익력 ${w.fwd}` : null,
+    consBand ? `컨센서스 ${w.cons}` : null,
+  ].filter(Boolean);
+  assumptions.push(
+    `목표주가 = ${usedWeights.join(" + ")} 가중평균(결측 방법은 빼고 재정규화). ` +
+      `RIM은 후행 장부 안전판, 선행이익력은 선행EPS로 성장 반영, 컨센서스는 시장 관점 (§5.2 v3)`,
+  );
+  if (intrinsicTarget != null && consensusGapPct != null) {
     assumptions.push(
-      `목표주가 = ${label}. 컨센서스는 다수 증권사의 선행 실적 추정을 반영하므로, ` +
-        `후행 실적만으로 사이클 저점 종목이 과소평가되는 문제를 보정한다 (§5.2 v3)`,
+      `AI 독립 내재가치(RIM+선행이익력) ${fmt(intrinsicTarget)}원 vs 컨센서스 ${fmt(
+        consensus!.targetMean,
+      )}원 → 괴리 ${signedPct(consensusGapPct)}. ` +
+        `괴리는 시장이 선행 실적에 적용하는 배수·성장·할인율 차이에서 비롯된다`,
     );
+  }
+  if (hasCons) {
     assumptions.push(
-      `증권사 컨센서스는 네이버 금융이 집계한 외부 출처값(기준일 ${
-        consensus!.asOf ?? "N/A"
-      })이며 본 앱이 산출한 값이 아니다`,
+      `증권사 컨센서스는 네이버 금융 집계 외부 출처값(기준일 ${consensus!.asOf ?? "N/A"})이며 본 앱 산출이 아니다`,
     );
   } else {
-    assumptions.push(
-      "증권사 컨센서스 미확보(애널리스트 커버리지 없음) → RIM 내재가치 단독. " +
-        "선행 실적 추정이 없어 후행 기준으로 보수적으로 평가됨",
-    );
+    assumptions.push("증권사 컨센서스 미확보(커버리지 없음) → AI 자체 산출(RIM·선행이익력)만으로 평가");
   }
 
   return {
@@ -252,6 +289,8 @@ export function valuate(
     upsidePct,
     opinion: decideOpinion(upsidePct),
     consensus,
+    intrinsicTarget,
+    consensusGapPct,
     assumptions,
   };
 }
@@ -261,4 +300,7 @@ function fmt(v: number | null): string {
 }
 function pct(v: number | null): string {
   return v === null ? "N/A" : `${(v * 100).toFixed(1)}%`;
+}
+function signedPct(v: number): string {
+  return `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
 }

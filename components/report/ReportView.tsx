@@ -183,6 +183,38 @@ function ConsensusRow({ report }: { report: Report }) {
   );
 }
 
+/** AI 독립 산출 vs 시장 컨센서스 비교 — 컨센서스 추종이 아님을 보여준다 (§5.2 v3 ⑤) */
+function IntrinsicVsMarket({ report }: { report: Report }) {
+  const v = report.valuation;
+  const consTarget = v.consensus?.targetMean ?? null;
+  if (v.intrinsicTarget == null || consTarget == null) return null;
+  return (
+    <div className="mt-3 rounded-xl border border-black/10 bg-black/[0.02] p-3 dark:border-white/10 dark:bg-white/[0.03]">
+      <p className="text-xs font-semibold opacity-70">AI 독립 산출 vs 시장</p>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-center text-sm tabular-nums">
+        <div>
+          <p className="text-xs opacity-60">AI 내재가치</p>
+          <p className="mt-0.5 font-semibold">{price(v.intrinsicTarget)}</p>
+        </div>
+        <div>
+          <p className="text-xs opacity-60">컨센서스</p>
+          <p className="mt-0.5 font-semibold">{price(consTarget)}</p>
+        </div>
+        <div>
+          <p className="text-xs opacity-60">괴리</p>
+          <p className={`mt-0.5 font-semibold ${changeColor(v.consensusGapPct)}`}>
+            {v.consensusGapPct == null ? "-" : signed(v.consensusGapPct, "pct")}
+          </p>
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed opacity-50">
+        AI 내재가치 = RIM(후행 장부) + 선행이익력(선행EPS×1/r), 컨센서스 제외. 최종 목표주가는 이 둘과
+        컨센서스의 가중평균.
+      </p>
+    </div>
+  );
+}
+
 function ValuationCard({ report }: { report: Report }) {
   const v = report.valuation;
   const m = report.valuation.metrics;
@@ -211,6 +243,7 @@ function ValuationCard({ report }: { report: Report }) {
       </div>
 
       <ConsensusRow report={report} />
+      <IntrinsicVsMarket report={report} />
 
       <div className="mt-3 space-y-1.5 border-t border-black/10 pt-3 text-xs opacity-70 dark:border-white/10">
         <p className="font-semibold opacity-90">

@@ -69,6 +69,17 @@ export function buildAllowedNumbers(
     addPct(r),
   );
 
+  // 제공된 연도 간 파생 성장률(YoY): 다년치 실적을 주므로 LLM이 연도별 YoY를 인용할 수 있다.
+  // 창작이 아니라 데이터에서 유도되는 값이므로 허용값에 포함한다.
+  const fins = data.annualFinancials;
+  for (let i = 0; i + 1 < fins.length; i++) {
+    for (const k of ["revenue", "operatingProfit", "netIncome"] as const) {
+      const cur = fins[i][k];
+      const prev = fins[i + 1][k];
+      if (cur != null && prev != null && prev > 0) percent.add(abs(((cur - prev) / prev) * 100));
+    }
+  }
+
   // 밸류에이션 산출값
   addPct(v.upsidePct, false);
   if (v.targetPrice) {

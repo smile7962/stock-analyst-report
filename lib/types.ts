@@ -81,6 +81,8 @@ export interface CompanyReportData {
   market: MarketSnapshot;
   /** 최근 공시 (최신순) */
   disclosures: Disclosure[];
+  /** DART 사업보고서 '사업의 개요' 발췌 (없으면 null/미설정) */
+  businessOverview?: string | null;
   /** 데이터 수집 시각 (ISO) — 캐시 조각의 신선도가 달라 병합 시점을 기록한다 */
   fetchedAt: string;
 }

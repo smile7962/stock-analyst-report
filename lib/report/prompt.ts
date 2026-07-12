@@ -67,6 +67,7 @@ export const SYSTEM_PROMPT = [
   "- 목표주가·투자의견 같은 판단은 이미 <데이터>에 계산되어 있다. 그 값을 새로 정하지 말고, 산출 근거만 서술한다.",
   "- 강점과 리스크를 동등한 비중으로 다룬다. 매수 일변도 금지.",
   "- 수치를 인용할 때는 <데이터>에 적힌 값을 그대로 쓴다(반올림은 허용).",
+  "- 사업 개요는 [사업 개요] 자료를 바탕으로 서술하되, 금액·비율 수치는 재무·시세 섹션의 값만 인용한다.",
   "- 간결하고 명확하게. 불필요한 미사여구 없이 핵심부터.",
 ].join("\n");
 
@@ -100,6 +101,9 @@ export function buildDataBlock(data: CompanyReportData, v: ValuationResult): str
 
   lines.push("<데이터>");
   lines.push(`[기업] ${p.name} (${p.stockCode}) · 대표 ${p.ceo} · DART업종코드 ${p.indutyCode}`);
+  if (data.businessOverview) {
+    lines.push(`[사업 개요(DART 사업보고서)] ${data.businessOverview}`);
+  }
   lines.push(
     `[시세] 현재가 ${fmtWon(m.close)} · 전일대비 ${fmtWon(m.change)} (${fmtPct(m.changePct, false)}) · ` +
       `시가총액 ${fmtWon(m.marketCap)} · 상장주식수 ${Math.round(m.listedShares).toLocaleString("ko-KR")}주 · ` +

@@ -7,7 +7,13 @@
  * 캐시는 조각별로 TTL을 달리한다 (시세=일, 재무·개황=분기). 병합 결과 전체를 한 키로
  * 캐시하지 않는다 — 계획서 §3의 "어제 주가로 계산되는 버그" 방지.
  */
-import { fetchCompanyRaw, fetchFinancialRaw, fetchDisclosuresRaw, REPRT_CODE } from "./dart";
+import {
+  fetchCompanyRaw,
+  fetchFinancialRaw,
+  fetchDisclosuresRaw,
+  fetchBusinessOverview,
+  REPRT_CODE,
+} from "./dart";
 import { normalizeFinancials } from "./normalize";
 import { KrxOpenApiClient } from "./krx";
 import { resolveStockEntry } from "./stock-master";
@@ -31,14 +37,25 @@ function getMarketClient(): KrxOpenApiClient {
 export async function fetchCompanyReport(stockCode: string): Promise<CompanyReportData> {
   const { corpCode } = resolveStockEntry(stockCode); // 없으면 StockNotFoundError
 
-  const [profile, annualFinancials, market, disclosures] = await Promise.all([
+  const [profile, annualFinancials, market, disclosures, businessOverview] = await Promise.all([
     cached(`profile:${corpCode}`, TTL.financials, () => fetchProfile(corpCode, stockCode)),
     cached(`fin:${corpCode}`, TTL.financials, () => fetchAnnualFinancials(corpCode)),
     cached(`market:${stockCode}`, TTL.daily, () => getMarketClient().fetchSnapshot(stockCode)),
     cached(`disc:${corpCode}`, TTL.daily, () => fetchRecentDisclosures(corpCode)),
+    // 사업 개요는 보조 정보 — 실패해도 리포트를 죽이지 않는다
+    cached(`biz:${corpCode}`, TTL.financials, () =>
+      fetchBusinessOverview(corpCode).catch(() => null),
+    ),
   ]);
 
-  return { profile, annualFinancials, market, disclosures, fetchedAt: new Date().toISOString() };
+  return {
+    profile,
+    annualFinancials,
+    market,
+    disclosures,
+    businessOverview,
+    fetchedAt: new Date().toISOString(),
+  };
 }
 
 async function fetchProfile(corpCode: string, stockCode: string): Promise<CompanyProfile> {

@@ -102,6 +102,17 @@ test("여러 문장 중 문제 문장만 골라낸다", () => {
   assert.ok(f[0].sentence.includes("250,000"));
 });
 
+test("제공된 연도 간 파생 YoY 인용은 통과한다 (창작 아님)", () => {
+  // 삼성 2024 매출 YoY=(300870903-258935494)/258935494=16.2%, 영업이익 YoY≈398.3%
+  const f = verifyNarrative(
+    narrative({
+      earningsComment: "2024년 매출은 YoY 16.2%, 영업이익은 YoY 398.3% 증가했다.",
+    }),
+    allowed,
+  );
+  assert.deepEqual(f, [], `예상치 못한 finding: ${JSON.stringify(f)}`);
+});
+
 test("허용값 집합에 목표주가 3밴드·지표가 모두 포함된다", () => {
   assert.ok(allowed.money.length > 5);
   assert.ok(allowed.percent.includes(15)); // 투자의견 임계

@@ -10,6 +10,8 @@
  * scripts/verify-dart.ts 실행으로 확인한다 (네트워크 정책 허용 후).
  */
 
+import { unzipSync, strFromU8 } from "fflate";
+
 const BASE = "https://opendart.fss.or.kr/api";
 
 /** 보고서 코드: 사업보고서(연간) / 반기 / 1분기 / 3분기 */
@@ -113,4 +115,52 @@ export async function fetchDisclosuresRaw(
     end_de: endDate,
     page_count: String(count),
   });
+}
+
+/**
+ * 최신 사업보고서의 '사업의 개요' 발췌.
+ *
+ * 스키마 근거(2026-07 실응답 확인): document.xml?rcept_no=... 은 원문 문서를 ZIP으로 준다.
+ * 첫 XML 파일 본문에서 '사업의 개요' 헤딩 이후 텍스트를 태그 제거해 발췌한다.
+ * 보조 정보이므로 실패 시 null 을 반환한다(리포트를 죽이지 않는다).
+ */
+export async function fetchBusinessOverview(corpCode: string): Promise<string | null> {
+  const now = new Date();
+  const yyyymmdd = (d: Date) =>
+    `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  const begin = `${now.getFullYear() - 2}0101`;
+  const list = await fetchDisclosuresRaw(corpCode, begin, yyyymmdd(now), 100);
+  const biz = (list.list ?? []).find((d) => d.report_nm.includes("사업보고서"));
+  if (!biz) return null;
+
+  const res = await fetch(`${BASE}/document.xml?crtfc_key=${apiKey()}&rcept_no=${biz.rcept_no}`);
+  if (!res.ok) return null;
+  const buf = new Uint8Array(await res.arrayBuffer());
+  if (!(buf[0] === 0x50 && buf[1] === 0x4b)) return null; // ZIP(PK) 아니면 오류 응답
+
+  const files = unzipSync(buf);
+  const first = Object.keys(files)[0];
+  if (!first) return null;
+  return extractOverview(strFromU8(files[first]));
+}
+
+/** 문서 XML에서 '사업의 개요' 문단을 태그 없는 텍스트로 발췌 (~500자, 문장 경계 컷) */
+function extractOverview(xml: string): string | null {
+  const idx = xml.indexOf("사업의 개요");
+  if (idx < 0) return null;
+  let text = xml
+    .slice(idx + "사업의 개요".length, idx + 2600)
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-zA-Z]+;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  // 참고 안내(☞) 또는 하위 항목 헤딩에서 컷
+  const cut = text.search(/☞|[가나다라]\.\s/);
+  if (cut > 120) text = text.slice(0, cut).trim();
+  if (text.length > 500) {
+    text = text.slice(0, 500);
+    const lastDot = text.lastIndexOf(".");
+    if (lastDot > 200) text = text.slice(0, lastDot + 1);
+  }
+  return text.length > 30 ? text : null;
 }

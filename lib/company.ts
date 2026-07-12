@@ -16,6 +16,7 @@ import {
 } from "./dart";
 import { normalizeFinancials } from "./normalize";
 import { KrxOpenApiClient } from "./krx";
+import { fetchConsensus } from "./consensus";
 import { resolveStockEntry } from "./stock-master";
 import { cached, TTL } from "./cache";
 import type { CompanyProfile, CompanyReportData, Disclosure, FinancialSnapshot } from "./types";
@@ -37,16 +38,19 @@ function getMarketClient(): KrxOpenApiClient {
 export async function fetchCompanyReport(stockCode: string): Promise<CompanyReportData> {
   const { corpCode } = resolveStockEntry(stockCode); // 없으면 StockNotFoundError
 
-  const [profile, annualFinancials, market, disclosures, businessOverview] = await Promise.all([
-    cached(`profile:${corpCode}`, TTL.financials, () => fetchProfile(corpCode, stockCode)),
-    cached(`fin:${corpCode}`, TTL.financials, () => fetchAnnualFinancials(corpCode)),
-    cached(`market:${stockCode}`, TTL.daily, () => getMarketClient().fetchSnapshot(stockCode)),
-    cached(`disc:${corpCode}`, TTL.daily, () => fetchRecentDisclosures(corpCode)),
-    // 사업 개요는 보조 정보 — 실패해도 리포트를 죽이지 않는다
-    cached(`biz:${corpCode}`, TTL.financials, () =>
-      fetchBusinessOverview(corpCode).catch(() => null),
-    ),
-  ]);
+  const [profile, annualFinancials, market, disclosures, businessOverview, consensus] =
+    await Promise.all([
+      cached(`profile:${corpCode}`, TTL.financials, () => fetchProfile(corpCode, stockCode)),
+      cached(`fin:${corpCode}`, TTL.financials, () => fetchAnnualFinancials(corpCode)),
+      cached(`market:${stockCode}`, TTL.daily, () => getMarketClient().fetchSnapshot(stockCode)),
+      cached(`disc:${corpCode}`, TTL.daily, () => fetchRecentDisclosures(corpCode)),
+      // 사업 개요는 보조 정보 — 실패해도 리포트를 죽이지 않는다
+      cached(`biz:${corpCode}`, TTL.financials, () =>
+        fetchBusinessOverview(corpCode).catch(() => null),
+      ),
+      // 컨센서스는 선행 밸류에이션 보정용 — 실패/미커버리지면 null (fetchConsensus 자체가 방어)
+      cached(`consensus:${stockCode}`, TTL.daily, () => fetchConsensus(stockCode)),
+    ]);
 
   return {
     profile,
@@ -54,6 +58,7 @@ export async function fetchCompanyReport(stockCode: string): Promise<CompanyRepo
     market,
     disclosures,
     businessOverview,
+    consensus,
     fetchedAt: new Date().toISOString(),
   };
 }

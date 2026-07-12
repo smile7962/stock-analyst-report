@@ -131,6 +131,20 @@ export function buildDataBlock(data: CompanyReportData, v: ValuationResult): str
       `매출CAGR ${fmtPct(met.revenueCagr)}`,
   );
 
+  // 증권사 컨센서스 — 외부 출처(네이버 금융 집계) 사실. 선행 실적을 반영하므로 목표주가 산정에 쓰인다
+  const cons = v.consensus;
+  if (cons && (cons.targetMean != null || cons.forwardEps != null)) {
+    const parts: string[] = [];
+    if (cons.targetMean != null) parts.push(`목표주가 컨센서스 ${fmtWon(cons.targetMean)}`);
+    if (cons.forwardEps != null) parts.push(`선행 EPS ${fmtWon(cons.forwardEps)}`);
+    if (cons.forwardPer != null) parts.push(`선행 PER ${fmtMult(cons.forwardPer)}`);
+    if (cons.recommMean != null) parts.push(`투자의견 평균 ${cons.recommMean.toFixed(2)}/5(5=매수)`);
+    lines.push(
+      `[시장 컨센서스] ${parts.join(" · ")} — 네이버 금융이 집계한 증권사 컨센서스` +
+        `${cons.asOf ? ` (기준일 ${cons.asOf})` : ""}. 외부 출처값이며 후행 실적 대비 선행 관점을 담는다`,
+    );
+  }
+
   lines.push("[연간 실적] (최신 연도 우선)");
   for (const f of data.annualFinancials) {
     lines.push(

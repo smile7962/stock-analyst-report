@@ -4,15 +4,16 @@ import { buildAllowedNumbers, verifyNarrative } from "./verify";
 import { computeMetrics } from "../analysis/metrics";
 import { classifyCompany } from "../analysis/classify";
 import { valuate } from "../analysis/valuation";
-import { SAMSUNG } from "../analysis/fixtures";
+import { SAMSUNG, SAMSUNG_CONSENSUS } from "../analysis/fixtures";
 import type { ReportNarrative } from "./types";
 
-// 삼성전자 실데이터로 밸류에이션 → 검증기 허용값 구성
+// 삼성전자 실데이터 + 컨센서스로 밸류에이션 → 검증기 허용값 구성
 const data = {
   profile: SAMSUNG.profile,
   annualFinancials: SAMSUNG.financials,
   market: SAMSUNG.market,
   disclosures: [],
+  consensus: SAMSUNG_CONSENSUS,
   fetchedAt: "2026-07-11T00:00:00Z",
 };
 const metrics = computeMetrics(SAMSUNG.financials, SAMSUNG.market);
@@ -22,6 +23,7 @@ const valuation = valuate(
   metrics,
   SAMSUNG.market,
   SAMSUNG.financials[0].revenue,
+  SAMSUNG_CONSENSUS,
 );
 const allowed = buildAllowedNumbers(data, valuation);
 
@@ -39,12 +41,23 @@ function narrative(over: Partial<ReportNarrative>): ReportNarrative {
 }
 
 test("데이터와 일치하는 수치(조/억·%·배·원)는 통과", () => {
-  // 삼성 2025 매출 333.6조, 현재가 285,000원, ROE 10.4%, PER 36.9배, 목표 기본 172,356원
+  // 삼성 2025 매출 333.6조, 현재가 285,000원, ROE 10.4%, PER 36.9배, 목표 기본 366,119원
   const f = verifyNarrative(
     narrative({
       business: "2025년 매출은 333.6조원, 순이익 45.2조원을 기록했다.",
       earningsComment: "현재가 285,000원에 PER 36.9배, PBR 3.8배, ROE 10.4% 수준이다.",
-      valuationComment: "기본 목표주가는 172,356원으로 상승여력은 -39.5%다.",
+      valuationComment: "기본 목표주가는 366,119원으로 상승여력은 28.5%다.",
+    }),
+    allowed,
+  );
+  assert.deepEqual(f, [], `예상치 못한 finding: ${JSON.stringify(f)}`);
+});
+
+test("컨센서스 사실(선행 EPS·선행 PER·목표주가 평균) 인용은 통과", () => {
+  const f = verifyNarrative(
+    narrative({
+      valuationComment:
+        "증권사 컨센서스 선행 EPS는 46,664원, 선행 PER 6.1배이며 목표주가 평균은 513,958원이다.",
     }),
     allowed,
   );
@@ -94,7 +107,7 @@ test("여러 문장 중 문제 문장만 골라낸다", () => {
   const f = verifyNarrative(
     narrative({
       analystView:
-        "현재가 285,000원은 부담스럽다. 적정가는 172,356원으로 본다. 다만 목표를 250,000원으로 낮춘다.",
+        "현재가 285,000원은 부담스럽다. 적정가는 366,119원으로 본다. 다만 목표를 250,000원으로 낮춘다.",
     }),
     allowed,
   );

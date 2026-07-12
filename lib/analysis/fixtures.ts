@@ -4,6 +4,7 @@
  * ⚠️ 테스트 전용 — 런타임 코드에서 import 하지 않는다.
  */
 import type { CompanyProfile, FinancialSnapshot, MarketSnapshot } from "../types";
+import type { Consensus } from "../consensus";
 
 function fs(
   period: string,
@@ -104,4 +105,28 @@ export const KAKAO = {
     fs("2023", 7557001757272, 460857845673, -1816669011014, 25179968939321, 11321369715195, 13858599224126, 1341098333644),
   ] as FinancialSnapshot[],
   market: market("035720", 35350, 442981070, 15659380824500),
+};
+
+// ── 증권사 컨센서스 픽스처 (2026-07-09 네이버 금융 집계) ─────────────────────
+// 삼성전자: 커버리지 있음. 신한: 있음. 소형주: 커버리지 없음(전 필드 null).
+export const SAMSUNG_CONSENSUS: Consensus = {
+  forwardEps: 46664,
+  forwardPer: 6.11,
+  targetMean: 513958,
+  recommMean: 4.04,
+  asOf: "2026-07-09",
+};
+export const SHINHAN_CONSENSUS: Consensus = {
+  forwardEps: 11833,
+  forwardPer: 9.23,
+  targetMean: 131667,
+  recommMean: 4.0,
+  asOf: "2026-07-09",
+};
+export const NO_CONSENSUS: Consensus = {
+  forwardEps: null,
+  forwardPer: null,
+  targetMean: null,
+  recommMean: null,
+  asOf: null,
 };

@@ -157,6 +157,32 @@ function EarningsTable({ financials }: { financials: FinancialSnapshot[] }) {
   );
 }
 
+function ConsensusRow({ report }: { report: Report }) {
+  const c = report.valuation.consensus;
+  if (!c || (c.targetMean == null && c.forwardEps == null)) return null;
+  const cells: { label: string; value: string }[] = [];
+  if (c.targetMean != null) cells.push({ label: "컨센서스 목표가", value: price(c.targetMean) });
+  if (c.forwardEps != null) cells.push({ label: "선행 EPS", value: price(c.forwardEps) });
+  if (c.forwardPer != null) cells.push({ label: "선행 PER", value: mult(c.forwardPer) });
+  if (c.recommMean != null)
+    cells.push({ label: "의견평균", value: `${c.recommMean.toFixed(2)}/5` });
+  return (
+    <div className="mt-3 rounded-xl border border-black/10 bg-black/[0.02] p-3 dark:border-white/10 dark:bg-white/[0.03]">
+      <p className="text-xs font-semibold opacity-70">
+        증권사 컨센서스{c.asOf ? ` · ${c.asOf}` : ""}
+      </p>
+      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm tabular-nums">
+        {cells.map((cell) => (
+          <div key={cell.label} className="flex justify-between">
+            <span className="opacity-60">{cell.label}</span>
+            <span className="font-semibold">{cell.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ValuationCard({ report }: { report: Report }) {
   const v = report.valuation;
   const m = report.valuation.metrics;
@@ -183,6 +209,8 @@ function ValuationCard({ report }: { report: Report }) {
         <span>{mult(m.pbr)}</span>
         <span>{pct(m.roe, true)}</span>
       </div>
+
+      <ConsensusRow report={report} />
 
       <div className="mt-3 space-y-1.5 border-t border-black/10 pt-3 text-xs opacity-70 dark:border-white/10">
         <p className="font-semibold opacity-90">

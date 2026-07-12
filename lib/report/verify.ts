@@ -80,6 +80,14 @@ export function buildAllowedNumbers(
     }
   }
 
+  // 컨센서스(외부 출처 사실): 선행 EPS·선행 PER·목표주가 평균·의견평균은 리포트가 인용 가능
+  if (v.consensus) {
+    addMoney(v.consensus.forwardEps);
+    addMult(v.consensus.forwardPer);
+    addMoney(v.consensus.targetMean);
+    // recommMean(1~5)은 단위 없는 값이라 토큰 추출 대상이 아니므로 허용집합 불필요
+  }
+
   // 밸류에이션 산출값
   addPct(v.upsidePct, false);
   if (v.targetPrice) {

@@ -3,6 +3,7 @@
 종목명을 입력하면 DART 공시·KRX 시세 데이터를 기반으로 애널리스트 수준의
 종목 리포트를 생성하는 모바일 웹앱.
 
+- 배포·스마트폰 사용: [DEPLOY.md](./DEPLOY.md)
 - 개발 계획: [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md)
 - 리포트 목표 스펙: [docs/REPORT_SPEC.md](./docs/REPORT_SPEC.md)
 - 코딩 에이전트 지침: [CLAUDE.md](./CLAUDE.md)

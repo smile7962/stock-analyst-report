@@ -10,8 +10,9 @@
  *  - 휴장일·미래일·basDd 누락: HTTP 200 + {"OutBlock_1":[]}
  *  - 인증 실패: HTTP 401 + {"respMsg":"Unauthorized Key","respCode":"401"}
  *  - 키에 미승인된 API: HTTP 401 + {"respMsg":"Unauthorized API Call","respCode":"401"}
- *    (현재 키는 유가증권 stk_bydd_trd·stk_isu_base_info만 승인 — KOSDAQ/KONEX는 포털에서
- *     추가 신청 필요. 미승인 시장은 건너뛰되, 종목을 못 찾으면 오류 메시지에 명시한다)
+ *    (현재 키는 유가증권 stk_bydd_trd·KOSDAQ ksq_bydd_trd·stk_isu_base_info 승인됨 — 2026-07
+ *     KOSDAQ 승인 확인. KONEX(knx_bydd_trd)는 미승인일 수 있어, 미승인 시장은 건너뛰되
+ *     종목을 못 찾으면 오류 메시지에 명시한다. 신규 시장 승인 시 코드 변경 없이 바로 동작한다)
  *
  * API가 "기준일자 1일 × 시장 전체 종목" 단위라 기간 조회는 일자별 반복 호출이 필요하다.
  * (일자,시장)별 응답을 인스턴스 캐시에 담아 같은 시장의 여러 종목 조회 시 재호출을 막는다.

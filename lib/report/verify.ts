@@ -56,6 +56,19 @@ export function buildAllowedNumbers(
     ].forEach(addMoney);
   }
 
+  // 분기 실적(당분기 3개월) — 금액 + 전년 동분기 대비 YoY(데이터 파생)
+  const quarters = data.quarterlyFinancials ?? [];
+  for (const q of quarters) [q.revenue, q.operatingProfit, q.netIncome].forEach(addMoney);
+  for (const q of quarters) {
+    const [year, qtr] = q.period.split(" ");
+    const prev = quarters.find((x) => x.period === `${Number(year) - 1} ${qtr}`);
+    for (const k of ["revenue", "operatingProfit", "netIncome"] as const) {
+      const cur = q[k];
+      const pv = prev?.[k];
+      if (cur != null && pv != null && pv > 0) percent.add(abs(((cur - pv) / pv) * 100));
+    }
+  }
+
   // 지표
   const met = v.metrics;
   addMoney(met.eps);

@@ -24,7 +24,7 @@ const MODEL = "gemini-2.5-flash";
 /**
  * 프롬프트/스키마/검증 로직이 바뀌면 이 값을 올려 이전 캐시를 무효화한다 (§6.5).
  */
-export const REPORT_VERSION = 3;
+export const REPORT_VERSION = 4;
 
 let client: GoogleGenAI | null = null;
 function getClient(): GoogleGenAI {

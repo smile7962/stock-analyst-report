@@ -70,12 +70,19 @@ export function parseAmount(raw: string | undefined): number | null {
   return Number(cleaned);
 }
 
-function matchRow(rows: DartAccountRow[], m: AccountMatcher): number | null {
+/** 읽을 금액 필드: 당기(3개월) 또는 당기 누적(YTD) */
+type AmountKey = "thstrm_amount" | "thstrm_add_amount";
+
+function matchRow(
+  rows: DartAccountRow[],
+  m: AccountMatcher,
+  amountKey: AmountKey = "thstrm_amount",
+): number | null {
   const inScope = rows.filter((r) => m.sjDivs.includes(r.sj_div));
   for (const id of m.ids) {
     const hit = inScope.find((r) => r.account_id === id);
     if (hit) {
-      const v = parseAmount(hit.thstrm_amount);
+      const v = parseAmount(hit[amountKey]);
       if (v !== null) return v;
     }
   }
@@ -84,11 +91,23 @@ function matchRow(rows: DartAccountRow[], m: AccountMatcher): number | null {
       (r) => r.account_nm.replace(/\s/g, "") === name.replace(/\s/g, ""),
     );
     if (hit) {
-      const v = parseAmount(hit.thstrm_amount);
+      const v = parseAmount(hit[amountKey]);
       if (v !== null) return v;
     }
   }
   return null;
+}
+
+/** 손익 3종(매출·영업이익·순이익)만 지정 금액 필드로 추출. 분기 시리즈 구성용 */
+export function extractIncomeItems(
+  rows: DartAccountRow[],
+  amountKey: AmountKey,
+): { revenue: number | null; operatingProfit: number | null; netIncome: number | null } {
+  return {
+    revenue: matchRow(rows, MATCHERS.revenue, amountKey),
+    operatingProfit: matchRow(rows, MATCHERS.operatingProfit, amountKey),
+    netIncome: matchRow(rows, MATCHERS.netIncome, amountKey),
+  };
 }
 
 /** 전체 재무제표 계정 행들을 정규화 스냅샷으로 변환 */

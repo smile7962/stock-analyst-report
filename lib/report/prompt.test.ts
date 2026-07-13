@@ -55,3 +55,28 @@ test("컨센서스가 없으면 [시장 컨센서스] 섹션을 넣지 않는다
   const block = dataBlock(SAMSUNG, null);
   assert.doesNotMatch(block, /\[시장 컨센서스\]/);
 });
+
+test("분기 실적이 있으면 [분기 실적] 섹션에 당분기 손익을 담는다", () => {
+  const data: CompanyReportData = {
+    profile: SAMSUNG.profile,
+    annualFinancials: SAMSUNG.financials,
+    quarterlyFinancials: [
+      { period: "2025 3Q", revenue: 86061747000000, operatingProfit: 12e12, netIncome: 12.2e12 },
+      { period: "2025 2Q", revenue: 74e12, operatingProfit: 4.7e12, netIncome: 5.1e12 },
+    ],
+    market: SAMSUNG.market,
+    disclosures: [],
+    fetchedAt: "2026-07-11T00:00:00Z",
+  };
+  const metrics = computeMetrics(SAMSUNG.financials, SAMSUNG.market);
+  const valuation = valuate(
+    "005930",
+    classifyCompany(SAMSUNG.profile, SAMSUNG.financials[0]),
+    metrics,
+    SAMSUNG.market,
+    SAMSUNG.financials[0].revenue,
+  );
+  const block = buildDataBlock(data, valuation);
+  assert.match(block, /\[분기 실적\]/);
+  assert.match(block, /2025 3Q/);
+});

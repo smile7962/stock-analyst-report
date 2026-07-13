@@ -3,6 +3,10 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* 실적 차트 팔레트 (dataviz 검증 통과: 카테고리 slot1 blue / slot2 aqua) */
+  --chart-revenue: #2a78d6; /* 매출 */
+  --chart-op: #1baf7a; /* 영업이익 */
+  --chart-baseline: #c3c2b7;
 }
 
 @theme inline {
@@ -14,6 +18,10 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    /* 다크 표면용으로 스텝된 동일 색상 (dataviz 다크 검증 통과) */
+    --chart-revenue: #3987e5;
+    --chart-op: #199e70;
+    --chart-baseline: #383835;
   }
 }
 
@@ -30,6 +38,10 @@ body {
   :root {
     --background: #ffffff;
     --foreground: #171717;
+    /* 인쇄는 밝은 배경 강제 — 차트도 라이트 색상으로 고정 */
+    --chart-revenue: #2a78d6;
+    --chart-op: #1baf7a;
+    --chart-baseline: #c3c2b7;
   }
   body {
     background: #ffffff;

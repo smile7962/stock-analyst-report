@@ -28,6 +28,15 @@ export interface FinancialSnapshot {
   operatingCashFlow: number | null;
 }
 
+/** 분기 실적 스냅샷(당분기 3개월 기준). 손익 3종만. 가격 단위: 원 */
+export interface QuarterlySnapshot {
+  /** 예: "2025 3Q" */
+  period: string;
+  revenue: number | null;
+  operatingProfit: number | null;
+  netIncome: number | null;
+}
+
 /** 일별 시세 1행. 가격 단위: 원 */
 export interface DailyPrice {
   /** YYYYMMDD */
@@ -78,6 +87,8 @@ export interface CompanyReportData {
   profile: CompanyProfile;
   /** 연간(사업보고서) 재무 스냅샷 — 최신 연도 우선 정렬 */
   annualFinancials: FinancialSnapshot[];
+  /** 분기 실적(당분기 3개월) — 최신 분기 우선. 미확보 시 빈 배열/미설정 */
+  quarterlyFinancials?: QuarterlySnapshot[];
   /** 최신 거래일 기준 시세 스냅샷 */
   market: MarketSnapshot;
   /** 최근 공시 (최신순) */

@@ -5,8 +5,9 @@
  * 색상 관례: 상승 빨강 / 하락 파랑.
  */
 import type { Report } from "@/lib/report/types";
-import type { FinancialSnapshot } from "@/lib/types";
+import type { FinancialSnapshot, QuarterlySnapshot } from "@/lib/types";
 import PrintButton from "./PrintButton";
+import BarChart, { ChartLegend, type BarSeries } from "./BarChart";
 import {
   won,
   price,
@@ -113,6 +114,30 @@ function yoy(cur: number | null, prev: number | null): number | null {
   return (cur - prev) / prev;
 }
 
+/** 매출·영업이익 2계열 막대 그래프 + 범례 (연간·분기 공용) */
+function EarningsChart({
+  periods,
+  revenue,
+  operatingProfit,
+}: {
+  periods: string[];
+  revenue: (number | null)[];
+  operatingProfit: (number | null)[];
+}) {
+  const series: BarSeries[] = [
+    { name: "매출", color: "var(--chart-revenue)", values: revenue },
+    { name: "영업이익", color: "var(--chart-op)", values: operatingProfit },
+  ];
+  return (
+    <div className="mb-3">
+      <ChartLegend series={series} />
+      <div className="mt-2">
+        <BarChart categories={periods} series={series} />
+      </div>
+    </div>
+  );
+}
+
 function EarningsTable({ financials }: { financials: FinancialSnapshot[] }) {
   if (!financials.length) {
     return (
@@ -123,8 +148,15 @@ function EarningsTable({ financials }: { financials: FinancialSnapshot[] }) {
       </Card>
     );
   }
+  // 차트는 과거→현재(왼→오른쪽)이 자연스러우므로 최신우선 배열을 뒤집는다
+  const chrono = [...financials].reverse();
   return (
     <Card title="연간 실적">
+      <EarningsChart
+        periods={chrono.map((f) => f.period)}
+        revenue={chrono.map((f) => f.revenue)}
+        operatingProfit={chrono.map((f) => f.operatingProfit)}
+      />
       <div className="overflow-x-auto">
         <table className="w-full text-right text-sm tabular-nums">
           <thead>
@@ -212,6 +244,59 @@ function IntrinsicVsMarket({ report }: { report: Report }) {
         컨센서스의 가중평균.
       </p>
     </div>
+  );
+}
+
+/** 같은 분기 전년 실적을 시리즈에서 찾아 매출 YoY */
+function quarterYoY(quarters: QuarterlySnapshot[], i: number): number | null {
+  const [year, q] = quarters[i].period.split(" ");
+  const prev = quarters.find((x) => x.period === `${Number(year) - 1} ${q}`);
+  return yoy(quarters[i].revenue, prev?.revenue ?? null);
+}
+
+function QuarterlyCard({ quarters }: { quarters: QuarterlySnapshot[] }) {
+  if (!quarters.length) return null;
+  const chrono = [...quarters].reverse(); // 과거→현재
+  return (
+    <Card title="분기 실적 (당분기, 3개월)">
+      <EarningsChart
+        periods={chrono.map((q) => q.period.replace(/^20/, ""))} // "2025 3Q" → "25 3Q"
+        revenue={chrono.map((q) => q.revenue)}
+        operatingProfit={chrono.map((q) => q.operatingProfit)}
+      />
+      <div className="overflow-x-auto">
+        <table className="w-full text-right text-sm tabular-nums">
+          <thead>
+            <tr className="border-b border-black/10 text-xs opacity-60 dark:border-white/10">
+              <th className="py-2 text-left font-medium">분기</th>
+              <th className="py-2 font-medium">매출액</th>
+              <th className="py-2 font-medium">영업이익</th>
+              <th className="py-2 font-medium">순이익</th>
+              <th className="py-2 font-medium">매출 YoY</th>
+            </tr>
+          </thead>
+          <tbody>
+            {quarters.map((q, i) => {
+              const g = quarterYoY(quarters, i);
+              return (
+                <tr key={q.period} className="border-b border-black/5 dark:border-white/5">
+                  <td className="py-2 text-left font-semibold">{q.period}</td>
+                  <td className="py-2">{won(q.revenue)}</td>
+                  <td className="py-2">{won(q.operatingProfit)}</td>
+                  <td className="py-2">{won(q.netIncome)}</td>
+                  <td className={`py-2 ${changeColor(g)}`}>
+                    {g == null ? "-" : signed(g * 100, "pct")}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-xs opacity-50">
+        당분기(3개월) 기준 · 4Q는 연간−3분기누적으로 산출 · YoY는 전년 동분기 대비 · DART 공시값 그대로
+      </p>
+    </Card>
   );
 }
 
@@ -318,6 +403,9 @@ export default function ReportView({ report }: { report: Report }) {
         <SummaryCard points={n.summary} />
         <Range52w low={m.low52w} close={m.close} high={m.high52w} />
         <EarningsTable financials={report.data.annualFinancials} />
+        {report.data.quarterlyFinancials && (
+          <QuarterlyCard quarters={report.data.quarterlyFinancials} />
+        )}
         <Card title="사업 개요">
           <p className="text-sm leading-relaxed">{n.business}</p>
           <p className="mt-3 text-sm leading-relaxed">{n.earningsComment}</p>

@@ -156,6 +156,15 @@ export function buildDataBlock(data: CompanyReportData, v: ValuationResult): str
     );
   }
 
+  if (data.quarterlyFinancials?.length) {
+    lines.push("[분기 실적] (당분기 3개월, 최신 분기 우선)");
+    for (const q of data.quarterlyFinancials) {
+      lines.push(
+        `  ${q.period}: 매출 ${fmtWon(q.revenue)} · 영업이익 ${fmtWon(q.operatingProfit)} · 순이익 ${fmtWon(q.netIncome)}`,
+      );
+    }
+  }
+
   lines.push(
     `[투자판단] 기업유형 ${v.companyType} · 목표주가 ${fmtBand(v.targetPrice)} · ` +
       `상승여력(기본) ${v.upsidePct == null ? "N/A" : fmtPct(v.upsidePct, false)} · 투자의견 ${v.opinion}`,

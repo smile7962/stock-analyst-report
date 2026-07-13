@@ -62,8 +62,10 @@ export interface DartAccountRow {
   /** 표준계정 ID (예: ifrs-full_Revenue). 표준 외 계정은 "-표준계정코드 미사용-" */
   account_id: string;
   account_nm: string;
-  /** 당기 금액 (콤마 포함 문자열, 음수는 -) */
+  /** 당기 금액 (콤마 포함 문자열, 음수는 -). 분기·반기 손익은 당기 3개월(discrete) */
   thstrm_amount: string;
+  /** 당기 누적 금액(YTD). 분기·반기 손익만 존재하며, 연간·재무상태표에는 빈 값일 수 있다 */
+  thstrm_add_amount?: string;
 }
 
 export interface DartFnlttResponse {
